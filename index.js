@@ -1,6 +1,6 @@
 const { Telegraf } = require("telegraf");
 require("dotenv").config();
-const { connectToDatabase, User } = require("./modules/db");
+const { connectToDatabase, User } = require("./modules/mongoDb");
 
 connectToDatabase();
 
@@ -65,6 +65,4 @@ bot.on("text", async (ctx) => {
   }
 });
 
-bot.launch().then(() => {
-  console.log("bot started...");
-});
+bot.launch();
