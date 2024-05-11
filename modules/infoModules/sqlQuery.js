@@ -1,9 +1,11 @@
-const { connection, checkConnection, userState } = require("./conectionDb");
+const { connection, checkConnection, userState } = require("../accessDb");
 const { deskCodes, paymentCodes, streetCodes } = require("./dataObjects");
 const { menu } = require("./options");
 
-async function searchByUser(chatId, text, bot) {
+async function searchByUser(text, ctx, User) {
+  const chatId = ctx.from.id;
   userState[chatId] = { searchValue: parseInt(text) };
+  const user = await User.findOne({ user_id: chatId });
 
   const sqlSearch = `
   SELECT CONSUM.CONSNAME, CONSUM.STRTCODE, CONSUM.HOUSE, зTOTPAY_ALL_Тек.Долг, зTOTPAY_ALL_Тек.ДатаРсч
@@ -20,18 +22,16 @@ async function searchByUser(chatId, text, bot) {
       const userProfile = `👤 ( ${userState[chatId].searchValue} ) ${
         userData[0].CONSNAME
       }
-🏠 адрес:${streetName} ${userData[0].HOUSE}
-💰 долг: ${userData[0].Долг.toFixed(0)} тг
-🧾 дата расчета: ${dataRep}`;
-      bot.sendMessage(chatId, userProfile, menu);
+    🏠 адрес:${streetName} ${userData[0].HOUSE}
+    💰 долг: ${userData[0].Долг.toFixed(0)} тг
+    🧾 дата расчета: ${dataRep}`;
+      ctx.replyWithHTML(userProfile, menu);
+      user.data = { ...user.data, searchValue: userState[chatId].searchValue };
+      await user.save();
     } else {
       userState[chatId] = { state: "search" };
-      const message = `Нет результатов для л/с ${text}`;
-      bot
-        .sendMessage(chatId, message)
-        .catch((error) =>
-          console.error("Ошибка при отправке сообщения:", error)
-        );
+      const message = `Нет результатов для л/с ${userState[chatId].searchValue}`;
+      ctx.reply(message);
     }
   } catch (error) {
     console.error("Ошибка при выполнении запроса:", error);
