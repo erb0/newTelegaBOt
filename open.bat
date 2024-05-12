@@ -1,3 +1,3 @@
 @echo
 code .
-exit
+@exit
