@@ -1,17 +1,12 @@
-// const { Telegraf } = require("telegraf");
 const {
   userInfoForInsert,
   wcodeInfoForInsert,
   insertValue,
   insertIfYes,
 } = require("./sql");
-// require("dotenv").config();
 const { authChatId } = require("./auth");
 
 function setupBot(Telegraf, token) {
-  // const token = process.env.TOKEN_BOT
-  // const bot = new Telegraf(token)
-
   const telegrafBot = new Telegraf(token);
 
   const useState = {};

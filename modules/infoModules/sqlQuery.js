@@ -1,6 +1,7 @@
 const { connection, checkConnection, userState } = require("../accessDb");
 const { deskCodes, paymentCodes, streetCodes } = require("./dataObjects");
 const { menu, cheap, payments } = require("./options");
+const options = require("./options");
 
 async function searchByUser(text, ctx, User) {
   const chatId = ctx.from.id;
@@ -13,6 +14,9 @@ async function searchByUser(text, ctx, User) {
   WHERE CONSUM.CONSCODE = ${userState[chatId].searchValue};`;
 
   try {
+    if (isNaN(text)) {
+      return ctx.reply("Введите число|");
+    }
     await checkConnection();
     const userData = await connection.query(sqlSearch);
     if (userData && userData.length > 0) {
@@ -46,71 +50,62 @@ async function searchByUser(text, ctx, User) {
   }
 }
 
-async function searchByWm(chatId, text, bot) {
-  const searchValue = parseInt(text);
-
-  const byWmQuery = `SELECT * FROM з_АбонентыВМ WHERE [wm] LIKE '%${searchValue}%'`;
-
+async function searchByWm(text, ctx) {
   try {
+    if (isNaN(text)) {
+      return ctx.reply("Введите число|");
+    }
     await checkConnection();
-    const wmData = await connection.query(byWmQuery);
+    const wmData = await connection.query(
+      `SELECT * FROM з_АбонентыВМ WHERE [wm] LIKE '%${text}%'`
+    );
     if (wmData && wmData.length > 0) {
       for (let i = 0; i < wmData.length; i++) {
-        const userProfileWm = `Л/с: ${wmData[i].userId}\nАбонент: ${wmData[i].user}\nУчасток: ${wmData[i].location}\nВодомер: ${wmData[i].wm}`;
+        const userProfileWm = `
+Л/с: ${wmData[i].userId}
+Абонент: ${wmData[i].user}
+Участок: ${wmData[i].location}
+Водомер: ${wmData[i].wm}`;
 
-        const inlineKeyboard = [
-          [
-            {
-              text: wmData[i].userId.toString(),
-              callback_data: `searchUser_${wmData[i].userId}`,
-            },
-          ],
-        ];
+        const button = options.byWm(
+          wmData[i].userId,
+          `searchUser_${wmData[i].userId}`
+        );
 
-        const options = {
-          reply_markup: {
-            inline_keyboard: inlineKeyboard,
-          },
-        };
-        await bot.sendMessage(chatId, userProfileWm, options);
+        await ctx.replyWithHTML(userProfileWm, button);
       }
     } else {
-      const message = `Нет результатов для в/м ${searchValue}`;
-      bot.sendMessage(chatId, message);
+      const message = `Нет результатов для в/м ${text}`;
+      ctx.reply(message);
     }
   } catch (error) {
     console.error("Ошибка при выполнении запроса:", error);
   }
 }
 
-async function searchByName(chatId, text, bot) {
-  const searchValue = text;
-  const byWmQuery = `SELECT * FROM з_АбонентыВМ WHERE [name] LIKE '%${searchValue}%'`;
-
+async function searchByName(text, ctx) {
   try {
     await checkConnection();
-    const wmData = await connection.query(byWmQuery);
+    const wmData = await connection.query(
+      `SELECT * FROM з_АбонентыВМ WHERE [name] LIKE '%${text}%'`
+    );
     if (wmData && wmData.length > 0) {
       for (let i = 0; i < wmData.length; i++) {
-        const userProfileWm = `Л/с: ${wmData[i].userId}\nАбонент: ${wmData[i].user}\nУчасток: ${wmData[i].location}\nВодомер: ${wmData[i].wm}`;
-        const inlineKeyboard = [
-          [
-            {
-              text: wmData[i].userId.toString(),
-              callback_data: `searchUser_${wmData[i].userId}`,
-            },
-          ],
-        ];
-        const options = {
-          reply_markup: {
-            inline_keyboard: inlineKeyboard,
-          },
-        };
-        await bot.sendMessage(chatId, userProfileWm, options);
+        const userProfileWm = `
+Л/с: ${wmData[i].userId}
+Абонент: ${wmData[i].user}
+Участок: ${wmData[i].location}
+Водомер: ${wmData[i].wm}`;
+
+        const button = options.byWm(
+          wmData[i].userId,
+          `searchUser_${wmData[i].userId}`
+        );
+
+        await ctx.replyWithHTML(userProfileWm, button);
       }
     } else {
-      const message = `Нет результатов для фио ${searchValue}`;
-      bot.sendMessage(chatId, message);
+      ctx.reply(`Нет результатов для фио ${text}`);
     }
   } catch (error) {
     console.error("Ошибка при выполнении запроса:", error);

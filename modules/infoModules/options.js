@@ -23,4 +23,14 @@ module.exports = {
     [{ text: "🔍 по л/с" }, { text: "🔍 по вм" }],
     [{ text: "🔍 по фио" }],
   ]).resize(),
+  byWm: (text, data) => {
+    return Markup.inlineKeyboard([[Markup.button.callback(text, data)]]);
+  },
+  clear: () => {
+    return {
+      reply_markup: JSON.stringify({
+        remove_keyboard: true,
+      }),
+    };
+  },
 };

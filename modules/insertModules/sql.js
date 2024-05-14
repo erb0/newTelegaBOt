@@ -5,10 +5,11 @@ const { formatDate, log } = require("./plugin");
 const { authChatId } = require("./auth");
 const { streetCodes } = require("./streetData");
 
-async function userInfoForInsert(chatId, txt, ctx, useState) {
+async function userInfoForInsert(userId, text, ctx, User) {
   try {
-    if (authChatId[chatId]) {
-      const arrayString = authChatId[chatId].section
+    const user = await User.findOne({ user_id: userId });
+    if (authChatId[userId]) {
+      const arrayString = authChatId[userId].section
         .map((value) => `'${value}'`)
         .join(",");
       await checkConnection();
@@ -16,7 +17,7 @@ async function userInfoForInsert(chatId, txt, ctx, useState) {
         `SELECT CONSUM.CONSNAME,CONSUM.FSBDVCODE,CONSUM.STRTCODE,CONSUM.HOUSE, CONSUM.CONSCODE, WCOUNT.FACTNUMB, WCOUNT.WCODE
         FROM CONSUM
         INNER JOIN WCOUNT ON CONSUM.CONSCODE = WCOUNT.CONSCODE
-        WHERE CONSUM.FSBDVCODE IN (${arrayString}) AND WCOUNT.CONSCODE = ${txt}`
+        WHERE CONSUM.FSBDVCODE IN (${arrayString}) AND WCOUNT.CONSCODE = ${text}`
       );
 
       if (data.length === 0) {
@@ -40,18 +41,22 @@ async function userInfoForInsert(chatId, txt, ctx, useState) {
           Markup.button.callback("Ввести другой л/c", "restart"),
         ]);
         const wcodeBtn = Markup.inlineKeyboard(buttons);
-        const userInfo = {
+        user.data = {
+          ...user.data,
           consname,
           conscode,
           streetName,
           houseNumber,
-          state: "insertWaterNumber",
         };
-        Object.assign(useState[chatId], userInfo);
+        await user.save();
+        await User.updateOne(
+          { user_id: userId },
+          { state: "insertWaterNumber" }
+        );
         await ctx.replyWithHTML(profile, wcodeBtn);
       }
     } else {
-      useState[chatId] = { state: "null" };
+      await User.updateOne({ user_id: userId }, { state: "null" });
       await ctx.replyWithHTML("Вы не авторизовались");
     }
   } catch (error) {
@@ -60,13 +65,14 @@ async function userInfoForInsert(chatId, txt, ctx, useState) {
   }
 }
 
-async function wcodeInfoForInsert(ctx, useState) {
+async function wcodeInfoForInsert(ctx, User) {
   try {
     const chatId = ctx.chat.id;
     const callbackData = ctx.match.input;
     const wcode = callbackData.replace("wcode_", "");
+    const user = await User.findOne({ user_id: chatId });
 
-    if (useState[chatId].state === "insertWaterNumber") {
+    if (user.state === "insertWaterNumber") {
       await checkConnection();
 
       const data = await connection.query(
@@ -89,13 +95,15 @@ async function wcodeInfoForInsert(ctx, useState) {
         await ctx.replyWithHTML(
           `<b>Введите текущее показание</b>\n   последнее - <b>${CURRCOUNT}</b>`
         );
-        const insertInfo = {
-          state: "insertValue",
+
+        user.data = {
+          ...user.data,
           WCODE,
           CURRCOUNT,
           FormattedDate,
         };
-        Object.assign(useState[chatId], insertInfo);
+        await user.save();
+        await User.updateOne({ user_id: chatId }, { state: "insertValue" });
       } else {
         const { FormattedDate, CURRCOUNT, WCODE } = data[0];
         if (nowDate === FormattedDate) {
@@ -108,13 +116,14 @@ async function wcodeInfoForInsert(ctx, useState) {
           await ctx.replyWithHTML(
             `<b>Введите текущее показание</b>\n   последнее - <b>${CURRCOUNT}</b>`
           );
-          const insertInfo = {
-            state: "insertValue",
+          user.data = {
+            ...user.data,
             WCODE,
             CURRCOUNT,
             FormattedDate,
           };
-          Object.assign(useState[chatId], insertInfo);
+          await user.save();
+          await User.updateOne({ user_id: chatId }, { state: "insertValue" });
         }
       }
     }
