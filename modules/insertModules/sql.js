@@ -104,6 +104,7 @@ async function wcodeInfoForInsert(ctx, User) {
         };
         await user.save();
         await User.updateOne({ user_id: chatId }, { state: "insertValue" });
+        console.log(user);
       } else {
         const { FormattedDate, CURRCOUNT, WCODE } = data[0];
         if (nowDate === FormattedDate) {

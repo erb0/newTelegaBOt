@@ -3,47 +3,49 @@ const { deskCodes, paymentCodes, streetCodes } = require("./dataObjects");
 const { menu, cheap, payments } = require("./options");
 const options = require("./options");
 
-async function searchByUser(text, ctx, User) {
-  const chatId = ctx.from.id;
-  userState[chatId] = { searchValue: parseInt(text) };
-  const user = await User.findOne({ user_id: chatId });
-
-  const sqlSearch = `
-  SELECT CONSUM.CONSNAME, CONSUM.STRTCODE, CONSUM.HOUSE, зTOTPAY_ALL_Тек.Долг, зTOTPAY_ALL_Тек.ДатаРсч
-  FROM CONSUM INNER JOIN зTOTPAY_ALL_Тек ON CONSUM.CONSCODE = зTOTPAY_ALL_Тек.CONSCODE
-  WHERE CONSUM.CONSCODE = ${userState[chatId].searchValue};`;
-
+async function searchByUser(searchValue, ctx, User) {
   try {
-    if (isNaN(text)) {
+    if (isNaN(searchValue)) {
       return ctx.reply("Введите число|");
     }
     await checkConnection();
-    const userData = await connection.query(sqlSearch);
-    if (userData && userData.length > 0) {
-      const streetCode = userData[0].STRTCODE;
+
+    const query = `
+  SELECT 
+  CONSUM.CONSNAME AS consname, 
+  CONSUM.STRTCODE AS streetCode, 
+  CONSUM.HOUSE AS house, 
+  зTOTPAY_ALL_Тек.Долг AS debt, 
+  зTOTPAY_ALL_Тек.ДатаРсч AS dateRep
+  FROM CONSUM INNER JOIN зTOTPAY_ALL_Тек 
+  ON CONSUM.CONSCODE = зTOTPAY_ALL_Тек.CONSCODE
+  WHERE CONSUM.CONSCODE = ${searchValue};`;
+
+    const data = await connection.query(query);
+
+    if (data.length > 0) {
+      const { consname, streetCode, house, debt, dateRep } = data[0];
       const streetName = streetCodes[streetCode];
-      const dataRep = userData[0].ДатаРсч.slice(0, 10);
-      const userProfile = `👤 ( ${userState[chatId].searchValue} ) ${
-        userData[0].CONSNAME
-      }\n🏠 адрес:${streetName} ${
-        userData[0].HOUSE
-      }\n💰 долг: ${userData[0].Долг.toFixed(
-        0
-      )} тг\n🧾 дата расчета: ${dataRep}`;
+      const userProfile = `👤 ( ${searchValue} ) ${consname}
+🏠 адрес:${streetName} ${house}
+💰 долг: ${debt.toFixed(2)} тг
+🧾 дата расчета: ${dateRep.slice(0, 10)}`;
 
       const sentMessage = await ctx.replyWithHTML(userProfile, menu);
+
+      const user = await User.findOne({ user_id: ctx.from.id });
+
       user.data = {
         ...user.data,
-        searchValue: userState[chatId].searchValue,
-        consname: userData[0].CONSNAME,
+        searchValue,
+        consname,
         sentMessage: sentMessage.message_id,
         userProfile,
       };
+
       await user.save();
     } else {
-      userState[chatId] = { state: "search" };
-      const message = `Нет результатов для л/с ${userState[chatId].searchValue}`;
-      ctx.reply(message);
+      ctx.reply(`Нет результатов для л/с ${searchValue}`);
     }
   } catch (error) {
     console.error("Ошибка при выполнении запроса:", error);
@@ -55,28 +57,24 @@ async function searchByWm(text, ctx) {
     if (isNaN(text)) {
       return ctx.reply("Введите число|");
     }
+
     await checkConnection();
-    const wmData = await connection.query(
-      `SELECT * FROM з_АбонентыВМ WHERE [wm] LIKE '%${text}%'`
-    );
-    if (wmData && wmData.length > 0) {
-      for (let i = 0; i < wmData.length; i++) {
-        const userProfileWm = `
-Л/с: ${wmData[i].userId}
-Абонент: ${wmData[i].user}
-Участок: ${wmData[i].location}
-Водомер: ${wmData[i].wm}`;
 
-        const button = options.byWm(
-          wmData[i].userId,
-          `searchUser_${wmData[i].userId}`
-        );
+    const query = `SELECT * FROM з_АбонентыВМ WHERE [wm] LIKE '%${text}%'`;
 
-        await ctx.replyWithHTML(userProfileWm, button);
-      }
+    const data = await connection.query(query);
+    if (data.length > 0) {
+      data.forEach(async ({ userId, user, location, wm }) => {
+        const userProfile = `
+Л/с: ${userId}
+Абонент: ${user}
+Участок: ${location}
+Водомер: ${wm}`;
+        const btn = options.byWm(userId, `searchUser_${userId}`);
+        await ctx.replyWithHTML(userProfile, btn);
+      });
     } else {
-      const message = `Нет результатов для в/м ${text}`;
-      ctx.reply(message);
+      ctx.reply(`Нет результатов для в/м ${text}`);
     }
   } catch (error) {
     console.error("Ошибка при выполнении запроса:", error);
@@ -86,24 +84,23 @@ async function searchByWm(text, ctx) {
 async function searchByName(text, ctx) {
   try {
     await checkConnection();
-    const wmData = await connection.query(
-      `SELECT * FROM з_АбонентыВМ WHERE [name] LIKE '%${text}%'`
-    );
-    if (wmData && wmData.length > 0) {
-      for (let i = 0; i < wmData.length; i++) {
-        const userProfileWm = `
-Л/с: ${wmData[i].userId}
-Абонент: ${wmData[i].user}
-Участок: ${wmData[i].location}
-Водомер: ${wmData[i].wm}`;
 
-        const button = options.byWm(
-          wmData[i].userId,
-          `searchUser_${wmData[i].userId}`
-        );
+    const query = `SELECT * FROM з_АбонентыВМ WHERE [name] LIKE '%${text}%'`;
 
-        await ctx.replyWithHTML(userProfileWm, button);
-      }
+    const data = await connection.query(query);
+
+    if (data.length > 0) {
+      data.forEach(async ({ userId, user, location, wm }) => {
+        const userProfile = `
+Л/с: ${userId}
+Абонент: ${user}
+Участок: ${location}
+Водомер: ${wm}`;
+
+        const btn = options.byWm(userId, `searchUser_${userId}`);
+
+        await ctx.replyWithHTML(userProfile, btn);
+      });
     } else {
       ctx.reply(`Нет результатов для фио ${text}`);
     }
@@ -116,35 +113,38 @@ async function searchPayment(User, ctx) {
   const chatId = ctx.from.id;
   const user = await User.findOne({ user_id: chatId });
 
-  let table = `👤 ( ${user.data.searchValue} ) ${user.data.consname}\nСписок последних оплат:
+  let message = `👤 ( ${user.data.searchValue} ) ${user.data.consname}\nСписок последних оплат:
     \n📅 Дата 💳 Касса 📑 Вид.опл 💰 Сумма\n`;
 
-  const sqlQuery = `SELECT TOP 12 SUMMA, PDESKCODE, PDATE, GROUPCODE
-    FROM HEAP WHERE CONSCODE = ${user.data.searchValue}
-    ORDER BY PDATE DESC`;
+  const sqlQuery = `
+  SELECT TOP 12 SUMMA AS summa, 
+  PDESKCODE AS deskCode, 
+  PDATE AS pdate, 
+  GROUPCODE AS paymentCode
+  FROM HEAP 
+  WHERE CONSCODE = ${user.data.searchValue}
+  ORDER BY PDATE DESC`;
 
   try {
     await checkConnection();
 
     const data = await connection.query(sqlQuery);
 
-    if (data && data.length > 0) {
+    if (data.length > 0) {
       for (let i = 0; i < data.length; i++) {
-        const deskCode = data[i].PDESKCODE;
+        const { summa, deskCode, pdate, paymentCode } = data[i];
         const deskName = deskCodes[deskCode] || "";
-        const paymentCode = data[i].GROUPCODE;
         const paymentName = paymentCodes[paymentCode] || "";
-        const dateOnly = data[i].PDATE.substring(0, 10);
-        table += `${dateOnly}, ${deskName}, ${paymentName}, ${data[
-          i
-        ].SUMMA.toFixed(2)} тг\n`;
+        const dateOnly = pdate.substring(0, 10);
+        const sum = summa.toFixed(2);
+        message += `${dateOnly}, ${deskName}, ${paymentName}, ${sum} тг\n`;
       }
 
       const sentMessage = await ctx.telegram.editMessageText(
         chatId,
         user.data.sentMessage,
         null,
-        table,
+        message,
         cheap
       );
       user.data = {
@@ -153,8 +153,7 @@ async function searchPayment(User, ctx) {
       };
       await user.save();
     } else {
-      const message = `Нет результатов для л/с ${user.data.searchValue}`;
-      ctx.reply(message);
+      ctx.reply(`Нет результатов для л/с ${user.data.searchValue}`);
     }
   } catch (error) {
     console.error("Ошибка при выполнении запроса:", error);
