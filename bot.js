@@ -27,7 +27,10 @@ const bot = new Telegraf(token);
 
 bot.command("start", async (ctx) => {
   try {
-    ctx.reply(`Привет ${ctx.from.username}! Добро пожаловать!`);
+    ctx.reply(`Привет ${ctx.from.first_name || "unknown"}! Добро пожаловать!
+Доступные команды:
+/info - Для получение информаций об абонентах
+/insert - Для внесение показания абонентов`);
 
     let user = await User.findOne({ user_id: ctx.from.id });
 
@@ -75,7 +78,10 @@ bot.command("insert", async (ctx) => {
       `Вы вошли как <i><b>${authChatId[chatId].name}</b></i>`
     );
     await User.updateOne({ user_id: ctx.from.id }, { state: "insertConscode" });
-    await ctx.replyWithHTML("Введите л/с!", clear());
+    await ctx.replyWithHTML(
+      "Введите л/с для внесения показаний счетчиков!",
+      clear()
+    );
   } else {
     await ctx.replyWithHTML("Вы не авторизовались", clear());
   }
@@ -128,6 +134,9 @@ bot.on("text", async (ctx) => {
           case "insertConscode":
             userInfoForInsert(userId, text, ctx, User);
             break;
+          case "insertValue":
+            insertValue(userId, text, ctx, User);
+            break;
           default:
             ctx.reply("Выберите команду....");
         }
@@ -155,12 +164,13 @@ bot.action(/searchUser_(.+)/, async (ctx) => {
   await User.updateOne({ user_id: ctx.from.id }, { state: "info" });
 });
 
-bot.action(/^wcode_/, async (ctx) => {
-  await wcodeInfoForInsert(ctx, User);
+bot.action(/^wcode_/, (ctx) => {
+  wcodeInfoForInsert(ctx, User);
 });
 
 bot.action("yes", async (ctx) => {
-  await insertIfYes(ctx, useState);
+  await ctx.deleteMessage();
+  insertIfYes(ctx, User);
 });
 
 bot.action("restart", async (ctx) => {

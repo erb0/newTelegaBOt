@@ -6,7 +6,7 @@ const options = require("./options");
 async function searchByUser(searchValue, ctx, User) {
   try {
     if (isNaN(searchValue)) {
-      return ctx.reply("Введите число|");
+      return ctx.reply("Введите число!");
     }
     await checkConnection();
 
@@ -27,13 +27,29 @@ async function searchByUser(searchValue, ctx, User) {
       const { consname, streetCode, house, debt, dateRep } = data[0];
       const streetName = streetCodes[streetCode];
       const userProfile = `👤 ( ${searchValue} ) ${consname}
-🏠 адрес:${streetName} ${house}
+🏠 адрес: ${streetName} ${house}
 💰 долг: ${debt.toFixed(2)} тг
 🧾 дата расчета: ${dateRep.slice(0, 10)}`;
 
-      const sentMessage = await ctx.replyWithHTML(userProfile, menu);
-
       const user = await User.findOne({ user_id: ctx.from.id });
+
+      if (user && user.data && user.data.sentMessage) {
+        try {
+          await ctx.telegram.deleteMessage(ctx.chat.id, user.data.sentMessage);
+        } catch (deleteError) {
+          console.error(
+            "Ошибка при удалении предыдущего сообщения:",
+            deleteError
+          );
+          if (deleteError.response && deleteError.response.error_code === 400) {
+            console.log(
+              `Сообщение с ID ${user.data.sentMessage} не найдено или уже удалено.`
+            );
+          }
+        }
+      }
+
+      const sentMessage = await ctx.replyWithHTML(userProfile, menu);
 
       user.data = {
         ...user.data,
@@ -45,10 +61,13 @@ async function searchByUser(searchValue, ctx, User) {
 
       await user.save();
     } else {
-      ctx.reply(`Нет результатов для л/с ${searchValue}`);
+      await ctx.reply(`Нет результатов для л/с ${searchValue}`);
     }
   } catch (error) {
     console.error("Ошибка при выполнении запроса:", error);
+    await ctx.reply(
+      "Произошла ошибка при выполнении запроса. Попробуйте позже."
+    );
   }
 }
 
@@ -64,15 +83,26 @@ async function searchByWm(text, ctx) {
 
     const data = await connection.query(query);
     if (data.length > 0) {
-      data.forEach(async ({ userId, user, location, wm }) => {
+      for (const { userId, user, location, wm } of data) {
         const userProfile = `
-Л/с: ${userId}
-Абонент: ${user}
-Участок: ${location}
-Водомер: ${wm}`;
+          Л/с: ${userId}
+          Абонент: ${user}
+          Участок: ${location}
+          Водомер: ${wm}`;
         const btn = options.byWm(userId, `searchUser_${userId}`);
         await ctx.replyWithHTML(userProfile, btn);
-      });
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      // data.forEach(async ({ userId, user, location, wm }) => {
+      //   const userProfile = `
+      // Л/с: ${userId}
+      // Абонент: ${user}
+      // Участок: ${location}
+      // Водомер: ${wm}`;
+      //   const btn = options.byWm(userId, `searchUser_${userId}`);
+      //   await ctx.replyWithHTML(userProfile, btn);
+      //   await new Promise((resolve) => setTimeout(resolve, 1000));
+      // });
     } else {
       ctx.reply(`Нет результатов для в/м ${text}`);
     }

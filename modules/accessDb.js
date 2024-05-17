@@ -1,5 +1,5 @@
 const ADODB = require("node-adodb");
-
+ADODB.debug = true;
 const connection = ADODB.open(
   `Provider=Microsoft.JET.OLEDB.4.0;
       Data Source=C:/sayram/sayram.mdb;
