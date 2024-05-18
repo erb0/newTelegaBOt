@@ -1,7 +1,12 @@
-const { connection, checkConnection, userState } = require("../accessDb");
-const { deskCodes, paymentCodes, streetCodes } = require("./dataObjects");
-const { menu, cheap, payments } = require("./options");
-const options = require("./options");
+const {
+  connection,
+  checkConnection,
+  deskCodes,
+  paymentCodes,
+  streetCodes,
+} = require("./accessDb");
+const { menu, cheap, payments } = require("./button");
+const button = require("./button");
 
 async function searchByUser(searchValue, ctx, User) {
   try {
@@ -84,25 +89,14 @@ async function searchByWm(text, ctx) {
     const data = await connection.query(query);
     if (data.length > 0) {
       for (const { userId, user, location, wm } of data) {
-        const userProfile = `
-          Л/с: ${userId}
-          Абонент: ${user}
-          Участок: ${location}
-          Водомер: ${wm}`;
-        const btn = options.byWm(userId, `searchUser_${userId}`);
+        const userProfile = `Л/с: ${userId}
+Абонент: ${user}
+Участок: ${location}
+Водомер: ${wm}`;
+        const btn = button.byWm(userId, `searchUser_${userId}`);
         await ctx.replyWithHTML(userProfile, btn);
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
-      // data.forEach(async ({ userId, user, location, wm }) => {
-      //   const userProfile = `
-      // Л/с: ${userId}
-      // Абонент: ${user}
-      // Участок: ${location}
-      // Водомер: ${wm}`;
-      //   const btn = options.byWm(userId, `searchUser_${userId}`);
-      //   await ctx.replyWithHTML(userProfile, btn);
-      //   await new Promise((resolve) => setTimeout(resolve, 1000));
-      // });
     } else {
       ctx.reply(`Нет результатов для в/м ${text}`);
     }
@@ -127,7 +121,7 @@ async function searchByName(text, ctx) {
 Участок: ${location}
 Водомер: ${wm}`;
 
-        const btn = options.byWm(userId, `searchUser_${userId}`);
+        const btn = button.byWm(userId, `searchUser_${userId}`);
 
         await ctx.replyWithHTML(userProfile, btn);
       });

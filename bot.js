@@ -1,7 +1,7 @@
-const { Telegraf, Extra } = require("telegraf");
+const { Telegraf } = require("telegraf");
 require("dotenv").config();
 const { connectToDatabase, User } = require("./modules/mongoDb");
-const { search, clear } = require("./modules/infoModules/options");
+const { search, clear } = require("./modules/button");
 
 const {
   searchByName,
@@ -10,15 +10,15 @@ const {
   searchByUser,
   searchByWm,
   back,
-} = require("./modules/infoModules/sqlQuery");
+} = require("./modules/sqlInfo");
 const {
   userInfoForInsert,
   wcodeInfoForInsert,
   insertValue,
   insertIfYes,
-} = require("./modules/insertModules/sql");
+} = require("./modules/sqlInsert");
 
-const { authChatId } = require("./modules/insertModules/auth");
+const { authChatId } = require("./modules/auth");
 
 connectToDatabase();
 

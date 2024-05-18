@@ -1,8 +1,7 @@
 const { Markup } = require("telegraf");
-const { restart, yes } = require("./buttons");
-const { connection, checkConnection } = require("../accessDb");
+const { restart, yes } = require("./button");
+const { connection, checkConnection, streetCodes } = require("./accessDb");
 const { authChatId } = require("./auth");
-const { streetCodes } = require("../infoModules/dataObjects");
 
 function formatDate(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
