@@ -21,7 +21,9 @@ async function searchByUser(searchValue, ctx, User) {
   CONSUM.STRTCODE AS streetCode, 
   CONSUM.HOUSE AS house, 
   зTOTPAY_ALL_Тек.Долг AS debt, 
-  зTOTPAY_ALL_Тек.ДатаРсч AS dateRep
+  зTOTPAY_ALL_Тек.ДатаРсч AS dateRep,
+  зTOTPAY_ALL_Тек.ТрфПит AS w,
+  зTOTPAY_ALL_Тек.ТрфКан AS ww
   FROM CONSUM INNER JOIN зTOTPAY_ALL_Тек 
   ON CONSUM.CONSCODE = зTOTPAY_ALL_Тек.CONSCODE
   WHERE CONSUM.CONSCODE = ${searchValue};`;
@@ -29,12 +31,17 @@ async function searchByUser(searchValue, ctx, User) {
     const data = await connection.query(query);
 
     if (data.length > 0) {
-      const { consname, streetCode, house, debt, dateRep } = data[0];
+      const { consname, streetCode, house, debt, dateRep, w, ww } = data[0];
       const streetName = streetCodes[streetCode];
+      const wCheckBox = w > 0 ? "✅" : "❌";
+      const wwCheckBox = ww > 0 ? "✅" : "❌";
       const userProfile = `👤 ( ${searchValue} ) ${consname}
 🏠 адрес: ${streetName} ${house}
 💰 долг: ${debt.toFixed(2)} тг
-🧾 дата расчета: ${dateRep.slice(0, 10)}`;
+🧾 дата расчета: ${dateRep.slice(0, 10)}
+🚰 тариф
+${wCheckBox} вода: ${w.toFixed(2)} тг
+${wwCheckBox} канализация: ${ww.toFixed(2)} тг`;
 
       const user = await User.findOne({ user_id: ctx.from.id });
 
@@ -93,7 +100,7 @@ async function searchByWm(text, ctx) {
 Абонент: ${user}
 Участок: ${location}
 Водомер: ${wm}`;
-        const btn = button.byWm(userId, `searchUser_${userId}`);
+        const btn = button.byWm(userId);
         await ctx.replyWithHTML(userProfile, btn);
         await new Promise((resolve) => setTimeout(resolve, 500));
       }

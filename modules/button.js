@@ -23,8 +23,10 @@ module.exports = {
     [{ text: "🔍 по л/с" }, { text: "🔍 по вм" }],
     [{ text: "🔍 по фио" }],
   ]).resize(),
-  byWm: (text, data) => {
-    return Markup.inlineKeyboard([[Markup.button.callback(text, data)]]);
+  byWm: (userId) => {
+    return Markup.inlineKeyboard([
+      [Markup.button.callback(userId, `searchUser_${userId}`)],
+    ]);
   },
   clear: () => {
     return {

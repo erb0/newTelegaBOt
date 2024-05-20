@@ -22,9 +22,9 @@ function checkConnection() {
 }
 
 const deskCodes = {};
-const paymentCodes = {}; // Создаем объект для хранения кодов оплат
+const paymentCodes = {};
 const streetCodes = {};
-// Функция для заполнения deskCodes и paymentCodes данными из базы данных
+
 async function populateCodes() {
   const deskQuery = `
     SELECT
@@ -68,7 +68,6 @@ async function populateCodes() {
   }
 }
 
-// Заполняем объекты данными из базы данных перед экспортом модуля
 async function main() {
   await populateCodes();
 }

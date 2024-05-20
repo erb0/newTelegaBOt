@@ -22,6 +22,24 @@ const userSchema = new mongoose.Schema({
   updated_at: { type: Date, default: Date.now },
 });
 
-const User = mongoose.model("User", userSchema);
+const consumerSchema = new mongoose.Schema({
+  conscode: Number,
+  consname: String,
+  sectionName: String,
+  inspectorName: String,
+  type: String,
+  street: String,
+  house: String,
+  debt: Number,
+  payment: Number,
+  meterReading: Number,
+  accrual: Number,
+  newDebt: Number,
+  w: Number,
+  ww: Number,
+});
 
-module.exports = { connectToDatabase, User };
+const User = mongoose.model("User", userSchema);
+const Consumer = mongoose.model("Consumer", consumerSchema);
+
+module.exports = { connectToDatabase, User, Consumer };
