@@ -2,7 +2,8 @@ const { Telegraf } = require("telegraf");
 require("dotenv").config();
 const { connectToDatabase, User } = require("./modules/mongoDb");
 const { search, clear } = require("./modules/button");
-
+const { connection } = require("./modules/accessDb");
+const { main } = require("./modules/reports/reportKaspi");
 const {
   searchByName,
   searchPayment,
@@ -84,6 +85,18 @@ bot.command("insert", async (ctx) => {
     );
   } else {
     await ctx.replyWithHTML("Вы не авторизовались", clear());
+  }
+});
+
+bot.command("kaspi", async (ctx) => {
+  try {
+    const chatId = ctx.chat.id;
+    if (chatId !== 498318670) {
+      return ctx.replyWithHTML("У вас нет доступа для этой команды!");
+    }
+    await main(chatId, connection, bot);
+  } catch (e) {
+    console.log("cant handle kaspi command", e);
   }
 });
 

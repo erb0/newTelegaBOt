@@ -2,12 +2,7 @@ const { Markup } = require("telegraf");
 const { restart, yes } = require("./button");
 const { connection, checkConnection, streetCodes } = require("./accessDb");
 const { authChatId } = require("./auth");
-
-function formatDate(date) {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  return `${month}.${year}`;
-}
+const { log, formatDate } = require("./plugin");
 
 async function userInfoForInsert(userId, text, ctx, User) {
   try {
@@ -190,6 +185,7 @@ VALUES ('${WCODE}', '${currentDate}', ${LASTCOUNT}, ${CURRCOUNT}, null)`;
 
         await ctx.reply("Данные успешно вставлены.\nВведите другой л/с!");
         await User.updateOne({ user_id: chatId }, { state: "insertConscode" });
+        await log(user, authChatId, chatId, ctx);
       } catch (dbError) {
         console.log("Ошибка базы данных:", dbError);
         return ctx.reply("Ошибка при вставке данных в базу данных.");
@@ -208,7 +204,8 @@ VALUES ('${WCODE}', '${currentDate}', ${LASTCOUNT}, ${CURRCOUNT}, null)`;
 
 async function insertIfYes(ctx, User) {
   try {
-    const user = await User.findOne({ user_id: ctx.from.id });
+    const chatId = ctx.from.id;
+    const user = await User.findOne({ user_id: chatId });
 
     if (!user) {
       return ctx.reply("Пользователь не найден.");
@@ -227,7 +224,8 @@ VALUES ('${WCODE}', '${DATE}', ${LASTCOUNT}, ${CURRCOUNT}, null)`;
 
     await ctx.reply("Данные успешно вставлены.\nВведите л/с!");
 
-    await User.updateOne({ user_id: ctx.from.id }, { state: "insertConscode" });
+    await User.updateOne({ user_id: chatId }, { state: "insertConscode" });
+    await log(user, authChatId, chatId, ctx);
   } catch (error) {
     console.log("Ошибка insertIfYes", error);
     await ctx.reply("Ошибка при вставке данных. Попробуйте еще раз.");
