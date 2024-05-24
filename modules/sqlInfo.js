@@ -7,12 +7,16 @@ const {
 } = require("./accessDb");
 const { menu, cheap, payments } = require("./button");
 const button = require("./button");
+const { logInfo } = require("./plugin");
 
 async function searchByUser(searchValue, ctx, User) {
   try {
     if (isNaN(searchValue)) {
       return ctx.reply("Введите число!");
     }
+    const chatId = ctx.from.id;
+    const name = ctx.from.username;
+    logInfo(chatId, name, searchValue, "Лсчет", ctx);
     await checkConnection();
 
     const query = `
@@ -88,7 +92,9 @@ async function searchByWm(text, ctx) {
     if (isNaN(text)) {
       return ctx.reply("Введите число|");
     }
-
+    const chatId = ctx.from.id;
+    const name = ctx.from.username;
+    logInfo(chatId, name, text, "в/м", ctx);
     await checkConnection();
 
     const query = `SELECT * FROM з_АбонентыВМ WHERE [wm] LIKE '%${text}%'`;
@@ -115,23 +121,23 @@ async function searchByWm(text, ctx) {
 async function searchByName(text, ctx) {
   try {
     await checkConnection();
-
+    const chatId = ctx.from.id;
+    const name = ctx.from.username;
+    logInfo(chatId, name, text, "фио", ctx);
     const query = `SELECT * FROM з_АбонентыВМ WHERE [name] LIKE '%${text}%'`;
 
     const data = await connection.query(query);
 
     if (data.length > 0) {
-      data.forEach(async ({ userId, user, location, wm }) => {
-        const userProfile = `
-Л/с: ${userId}
+      for (const { userId, user, location, wm } of data) {
+        const userProfile = `Л/с: ${userId}
 Абонент: ${user}
 Участок: ${location}
 Водомер: ${wm}`;
-
-        const btn = button.byWm(userId, `searchUser_${userId}`);
-
+        const btn = button.byWm(userId);
         await ctx.replyWithHTML(userProfile, btn);
-      });
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
     } else {
       ctx.reply(`Нет результатов для фио ${text}`);
     }

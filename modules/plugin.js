@@ -131,8 +131,75 @@ async function log(user, authChatId, chatId, ctx) {
   }
 }
 
+async function logInfo(chatId, name, text, type, ctx) {
+  try {
+    const ID = chatId;
+    const NAME = name;
+    const DATA = text;
+    const TYPE = type;
+    const now = new Date();
+    const YEAR = now.getFullYear();
+    const MONTH = now.getMonth() + 1; // Месяцы в объекте Date нумеруются с 0, поэтому добавляем 1
+    const DAY = now.getDate();
+    const TIME = now.getHours();
+    console.log(`${NAME} [${TYPE}]- ${DATA}`);
+    const existingFilePath = "./modules/log/log.xlsx";
+    const dir = path.dirname(existingFilePath);
+
+    // Создаем директорию, если она не существует
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    let workbook;
+    let sheet;
+    const sheetName = "log";
+
+    // Проверяем, существует ли файл
+    if (fs.existsSync(existingFilePath)) {
+      workbook = XLSX.readFile(existingFilePath);
+      sheet = workbook.Sheets[sheetName];
+    } else {
+      workbook = XLSX.utils.book_new();
+      sheet = XLSX.utils.aoa_to_sheet([
+        ["ID", "NAME", "TYPE", "DATA", "YEAR", "MONTH", "DAY", "TIME"],
+      ]); // Заголовки столбцов
+      XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
+    }
+
+    const newRowData = [ID, NAME, TYPE, DATA, YEAR, MONTH, DAY, TIME].map(
+      String
+    );
+
+    let range = XLSX.utils.decode_range(sheet["!ref"]);
+    const newRowNumber = range.e.r + 1;
+
+    for (let i = 0; i < newRowData.length; i++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: newRowNumber, c: i });
+      sheet[cellAddress] = { v: newRowData[i], t: "s" };
+    }
+
+    range = XLSX.utils.encode_range({
+      s: { c: 0, r: 0 },
+      e: { c: newRowData.length - 1, r: newRowNumber },
+    });
+    sheet["!ref"] = range;
+
+    XLSX.writeFile(workbook, existingFilePath);
+    await ctx.telegram.sendMessage(498318670, `${NAME} [${TYPE}]- ${DATA}`);
+    return true;
+  } catch (error) {
+    console.error(
+      "Произошла ошибка при добавлении строки в файл Excel:",
+      error
+    );
+    return false;
+  }
+}
+
 module.exports = {
   log,
   formatDate,
   formatValue,
+  logInfo,
 };
