@@ -118,8 +118,9 @@ async function didntPay(value, ctx, connection) {
       newDebt
     FROM [1_CONSUMER_INFO]
     WHERE locationCode = '${value}' AND newDebt > 10
-    ORDER BY street
+    ORDER BY street,house
     `;
+
     await ctx.reply("Ждите, идет запрос в базу...");
 
     const data = await connection.query(query);
@@ -207,7 +208,7 @@ async function didntPay(value, ctx, connection) {
           font,
           color: rgb(0, 0, 0),
         });
-        page.drawText(consname.toString(), {
+        page.drawText(consname ? consname.toString() : "", {
           x: 90,
           y,
           size: fontSize,
@@ -221,7 +222,7 @@ async function didntPay(value, ctx, connection) {
           font,
           color: rgb(0, 0, 0),
         });
-        page.drawText(house.toString(), {
+        page.drawText(house ? house.toString() : "", {
           x: 490,
           y,
           size: fontSize,

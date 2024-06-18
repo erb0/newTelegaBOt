@@ -22,14 +22,12 @@ function checkConnection() {
   });
 }
 
-function parseObjText(obj) {
-  // return Object.entries(obj)
-  //   .map(([key, value]) => (value = "Карасу")`${key} - ${value}`)
-  //   .join("\n");
+// Функция для парсинга объекта и поиска значений, содержащих текст
+function parseObjText(obj, text) {
   return Object.entries(obj)
-    .filter(([key, value]) => value.includes("Карасу"))
-    .map(([key, value]) => `${key} - ${value}`)
-    .join("\n");
+    .filter(([key, value]) => value.includes(text)) // фильтрация пар ключ-значение
+    .map(([key, value]) => `${key} - ${value}`) // форматирование строки
+    .join("\n"); // соединение строк
 }
 
 const deskCodes = {};

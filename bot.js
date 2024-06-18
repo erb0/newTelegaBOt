@@ -37,7 +37,8 @@ function botStart() {
 Доступные команды:
 /info - Для получение информаций об абонентах\n
 /insert - Для внесение показания абонентов\n
-/didntPay - Списки не оплативших абонентов по коду контролера`);
+/list - Коды контролеров\n
+/didntpay - Списки не оплативших абонентов по коду контролера`);
       let user = await User.findOne({ user_id: ctx.from.id });
       if (!user) {
         user = new User({
@@ -59,9 +60,9 @@ function botStart() {
     }
   });
 
-  bot.command("didntPay", async (ctx) => {
+  bot.command("didntpay", async (ctx) => {
     try {
-      ctx.reply("Введите код участка.");
+      ctx.reply(`Введите код контролера.\n*коды контролеров /list`);
       await User.updateOne({ user_id: ctx.from.id }, { state: "didntPay" });
     } catch (e) {
       console.log("cant handle didntPay command", e);
@@ -78,37 +79,10 @@ function botStart() {
 
   bot.command("list", async (ctx) => {
     try {
-      function splitMessage(message, maxLength) {
-        const parts = [];
-        let part = "";
-
-        message.split("\n").forEach((line) => {
-          if ((part + line).length > maxLength) {
-            parts.push(part);
-            part = "";
-          }
-          part += `${line}\n`;
-        });
-
-        if (part.length > 0) {
-          parts.push(part);
-        }
-
-        return parts;
-      }
-      const message = parseObjText(locationCodes);
-
-      const messageParts = splitMessage(message, 4000); // Максимальная длина сообщения в Telegram - 4096 символов
-
-      // Пример отправки сообщения в контексте бота
-      async function sendDeskCodes(ctx, messageParts) {
-        for (const part of messageParts) {
-          await ctx.reply(part);
-        }
-      }
-      await sendDeskCodes(ctx, messageParts);
+      ctx.reply("Введите ФИО контролера или наименование сельского округа.");
+      await User.updateOne({ user_id: ctx.from.id }, { state: "list" });
     } catch (e) {
-      console.log("cant handle list command", e);
+      console.log("cant handle didntPay command", e);
     }
   });
 
@@ -173,6 +147,50 @@ function botStart() {
             //   break;
             case "didntPay":
               await didntPay(text, ctx, connection);
+              break;
+            case "list":
+              try {
+                // Функция для разделения длинного сообщения на части
+                function splitMessage(message, maxLength) {
+                  const parts = [];
+                  let part = "";
+
+                  message.split("\n").forEach((line) => {
+                    if ((part + line).length > maxLength) {
+                      // проверка на превышение длины
+                      parts.push(part);
+                      part = "";
+                    }
+                    part += `${line}\n`;
+                  });
+
+                  if (part.length > 0) {
+                    parts.push(part); // добавление последней части, если она не пустая
+                  }
+
+                  return parts;
+                }
+
+                const message = parseObjText(locationCodes, text); // парсинг объекта
+
+                // Проверка на отсутствие результатов
+                if (message.trim() === "") {
+                  await ctx.reply("Ничего не найдено.");
+                } else {
+                  const messageParts = splitMessage(message, 4000); // разделение на части
+
+                  // Функция для отправки сообщений частями
+                  async function sendDeskCodes(ctx, messageParts) {
+                    for (const part of messageParts) {
+                      await ctx.reply(part); // отправка каждой части
+                    }
+                  }
+
+                  await sendDeskCodes(ctx, messageParts); // вызов функции отправки
+                }
+              } catch (e) {
+                console.log("Не удается обработать состояние list", e); // обработка ошибок
+              }
               break;
             case "searchbyuser":
               searchByUser(text, ctx, User);

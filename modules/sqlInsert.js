@@ -176,10 +176,14 @@ async function insertValue(chatId, text, ctx, User) {
       try {
         const currentDate = new Date().toISOString().slice(0, 10); // Получение текущей даты в формате YYYY-MM-DD
 
+        //         const sqlQuery = `
+        // INSERT
+        // INTO WCHEAP
+        // VALUES ('${WCODE}', '${currentDate}', ${LASTCOUNT}, ${CURRCOUNT}, null)`;
+
         const sqlQuery = `
-INSERT 
-INTO WCHEAP
-VALUES ('${WCODE}', '${currentDate}', ${LASTCOUNT}, ${CURRCOUNT}, null)`;
+INSERT INTO WCHEAP
+VALUES (${WCODE}, #05/30/2024#, ${LASTCOUNT}, ${CURRCOUNT}, null)`;
 
         await connection.execute(sqlQuery);
 
@@ -216,9 +220,13 @@ async function insertIfYes(ctx, User) {
 
     await checkConnection();
 
+    //     const query = `
+    // INSERT INTO WCHEAP
+    // VALUES ('${WCODE}', '${DATE}', ${LASTCOUNT}, ${CURRCOUNT}, null)`;
+
     const query = `
-INSERT INTO WCHEAP 
-VALUES ('${WCODE}', '${DATE}', ${LASTCOUNT}, ${CURRCOUNT}, null)`;
+INSERT INTO WCHEAP
+VALUES (${WCODE}, #05/30/2024#,  ${LASTCOUNT}, ${CURRCOUNT}, null)`;
 
     await connection.execute(query);
 
