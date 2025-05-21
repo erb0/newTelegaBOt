@@ -1,7 +1,10 @@
 const { Telegraf } = require('telegraf')
 require('dotenv').config()
-const { connectToDatabase, User, Log } = require('./modules/mongoDb')
+const { connectToDatabase, User, Log, Photo } = require('./modules/mongoDb')
 const { search, clear } = require('./modules/button')
+const path = require('path')
+const axios = require('axios')
+const { createClient } = require('@supabase/supabase-js')
 const {
   connection,
   parseObjText,
@@ -30,9 +33,12 @@ const { authChatId, auth } = require('./modules/auth')
 connectToDatabase()
 
 function botStart() {
+  const SUPABASE_URL = process.env.SUPABASE_URL
+  const SUPABASE_KEY = process.env.SUPABASE_KEY
+  const BUCKET_NAME = process.env.BUCKET_NAME
   const token = process.env.TELEGRAM_TOKEN
   const bot = new Telegraf(token)
-
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
   async function safeReply(ctx, ...args) {
     try {
       await ctx.replyWithHTML(...args)
@@ -177,6 +183,56 @@ function botStart() {
       }
     } else {
       await safeReply(ctx, 'Выберите команду....')
+    }
+  })
+
+  // ==== Обработка фото ====
+  bot.on('photo', async (ctx) => {
+    try {
+      const file = ctx.message.photo.pop()
+      const fileId = file.file_id
+      const fileLink = await ctx.telegram.getFileLink(fileId)
+
+      const conscode = '123456' // ← можно динамически получить от пользователя
+      const now = new Date()
+      const fileName = `${conscode}_${now
+        .toLocaleDateString('ru-RU')
+        .replace(/\//g, '.')}.jpg`
+
+      const response = await axios.get(fileLink.href, {
+        responseType: 'arraybuffer',
+      })
+
+      // Загрузка в Supabase
+      const { data, error } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(`meters/${fileName}`, response.data, {
+          contentType: 'image/jpeg',
+          upsert: true,
+        })
+
+      if (error) {
+        console.error('Ошибка Supabase:', error)
+        return ctx.reply('❌ Не удалось загрузить фото')
+      }
+
+      const { data: publicUrl } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(`meters/${fileName}`)
+
+      // Сохраняем в MongoDB
+      await Photo.create({
+        chatId: ctx.chat.id,
+        name: ctx.message.from.first_name,
+        CONSCODE: conscode,
+        photoUrl: publicUrl.publicUrl,
+        date: now,
+      })
+
+      ctx.reply('✅ Фото успешно загружено!')
+    } catch (err) {
+      console.error('Ошибка:', err)
+      ctx.reply('⚠️ Произошла ошибка при загрузке фото')
     }
   })
 

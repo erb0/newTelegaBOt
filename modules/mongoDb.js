@@ -47,6 +47,14 @@ const logSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },
 })
 
+const PhotoSchema = new mongoose.Schema({
+  chatId: Number,
+  name: String,
+  CONSCODE: String,
+  photoUrl: String,
+  date: Date,
+})
+
 async function logInfoMongo(chatId, name, text, type, ctx) {
   try {
     const logEntry = new Log({
@@ -64,11 +72,13 @@ async function logInfoMongo(chatId, name, text, type, ctx) {
 const User = mongoose.model('User', userSchema)
 const Consumer = mongoose.model('Consumer', consumerSchema)
 const Log = mongoose.model('Log', logSchema)
+const Photo = mongoose.model('Photo', PhotoSchema)
 
 module.exports = {
   connectToDatabase,
   User,
   Consumer,
   Log,
+  Photo,
   logInfoMongo,
 }
