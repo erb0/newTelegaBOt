@@ -9,6 +9,8 @@ const { menu, cheap, payments, byWm } = require("./button");
 const { logInfo } = require("./plugin");
 const { authChatId } = require("./auth");
 const { logInfoMongo } = require("./mongoDb");
+const path = require("path");
+const axios = require("axios");
 
 function validateNumberInput(input, ctx) {
   if (isNaN(input)) {
@@ -24,10 +26,10 @@ function buildUserProfile(data, searchValue) {
   const wCheckBox = w > 0 ? "✅" : "❌";
   const wwCheckBox = ww > 0 ? "✅" : "❌";
   return `👤 ( ${searchValue} ) ${consname}
-🏠 адрес: ${streetName} ${house}
+🏡 адрес: ${streetName} ${house}
 💰 долг: ${debt.toFixed(2)} тг
-🧾 дата расчета: ${dateRep.slice(0, 10)}
-🚰 тариф
+📅 дата расчета: ${dateRep.slice(0, 10)}
+📑 тариф
 ${wCheckBox} вода: ${w.toFixed(2)} тг
 ${wwCheckBox} канализация: ${ww.toFixed(2)} тг`;
 }
@@ -130,7 +132,12 @@ async function searchPayment(User, ctx) {
     let message = `👤 ( ${user.data.searchValue} ) ${user.data.consname}
 Список последних оплат:
 📅 Дата 💳 Касса 📑 Вид.опл 💰 Сумма\n`;
-    const sqlQuery = `SELECT TOP 12 SUMMA AS summa, PDESKCODE AS deskCode, PDATE AS pdate, GROUPCODE AS paymentCode FROM HEAP WHERE CONSCODE = ${user.data.searchValue} ORDER BY PDATE DESC`;
+    const sqlQuery = `SELECT TOP 12 SUMMA AS summa, 
+                      PDESKCODE AS deskCode, 
+                      PDATE AS pdate, 
+                      GROUPCODE AS paymentCode 
+                      FROM HEAP WHERE CONSCODE = ${user.data.searchValue} 
+                      ORDER BY PDATE DESC`;
 
     await checkConnection();
     const data = await connection.query(sqlQuery);
@@ -165,7 +172,11 @@ async function searchCheap(User, ctx) {
   try {
     const chatId = ctx.from.id;
     const user = await User.findOne({ user_id: chatId });
-    const searchQuery = `SELECT DISTINCT WCODE, FACTNUMB, DATESET FROM WCOUNT WHERE CONSCODE = ${user.data.searchValue}`;
+    const searchQuery = `SELECT DISTINCT WCODE, 
+                         FACTNUMB, 
+                         DATESET 
+                         FROM WCOUNT 
+                         WHERE CONSCODE = ${user.data.searchValue}`;
     const waterMeters = await connection.query(searchQuery);
 
     let formattedResult = `👤 ( ${user.data.searchValue} ) ${user.data.consname}\n`;
@@ -177,7 +188,11 @@ async function searchCheap(User, ctx) {
       )}\n📅 Дата | 📋Показания\n`;
 
       const result = await connection.query(
-        `SELECT TOP 12 CURRCOUNT, LASTDATE FROM WCHEAP WHERE WCODE = ${WCODE} ORDER BY LASTDATE DESC`
+        `SELECT TOP 12 CURRCOUNT, 
+         LASTDATE 
+         FROM WCHEAP 
+         WHERE WCODE = ${WCODE} 
+         ORDER BY LASTDATE DESC`
       );
 
       result.forEach(({ CURRCOUNT, LASTDATE }) => {
@@ -219,6 +234,73 @@ async function back(User, ctx) {
   }
 }
 
+async function handlePhotoUpload(ctx, conscode, supabase, PhotoModel) {
+  try {
+    const file = ctx.message.photo.pop();
+    const fileId = file.file_id;
+    const fileLink = await ctx.telegram.getFileLink(fileId);
+
+    const now = new Date();
+    // const fileName = `${conscode}_${now
+    //   .toLocaleDateString("ru-RU")
+    //   .replace(/\//g, ".")}.jpg`;
+
+    // const fileName = `${conscode}_${now
+    //   .toLocaleString("ru-RU", {
+    //     day: "2-digit",
+    //     month: "2-digit",
+    //     year: "numeric",
+    //     hour: "2-digit",
+    //     minute: "2-digit",
+    //     second: "2-digit",
+    //   })
+    //   .replace(/[\/:\s]/g, ".")}.jpg`;
+
+    const datePart = now.toLocaleDateString("ru-RU").replace(/\//g, ".");
+    const timePart = now
+      .toLocaleTimeString("ru-RU", { hour12: false })
+      .replace(/:/g, ".");
+
+    const fileName = `${conscode}_${datePart}.${timePart}.jpg`;
+
+    const response = await axios.get(fileLink.href, {
+      responseType: "arraybuffer",
+    });
+
+    // Загрузка в Supabase
+    const { error: uploadError } = await supabase.storage
+      .from("meters") // имя bucket
+      .upload(`meters/${fileName}`, response.data, {
+        contentType: "image/jpeg",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error("Ошибка Supabase:", uploadError);
+      return ctx.reply("❌ Не удалось загрузить фото");
+    }
+
+    // Получение публичной ссылки
+    const { data: publicUrlData } = supabase.storage
+      .from("meters")
+      .getPublicUrl(`meters/${fileName}`);
+
+    // Сохраняем в MongoDB
+    await PhotoModel.create({
+      chatId: ctx.chat.id,
+      name: ctx.from.first_name,
+      CONSCODE: conscode,
+      photoUrl: publicUrlData.publicUrl,
+      date: now,
+    });
+
+    await ctx.reply("✅ Фото успешно загружено!");
+  } catch (err) {
+    console.error("Ошибка при загрузке фото:", err);
+    await ctx.reply("⚠️ Произошла ошибка при загрузке фото");
+  }
+}
+
 module.exports = {
   searchByName,
   searchPayment,
@@ -226,4 +308,5 @@ module.exports = {
   searchByUser,
   searchByWm,
   back,
+  handlePhotoUpload,
 };

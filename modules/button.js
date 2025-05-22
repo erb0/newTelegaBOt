@@ -6,7 +6,7 @@ module.exports = {
       Markup.button.callback("💸 платежи", "payments"),
       Markup.button.callback("📋 показания", "cheap"),
     ],
-    // [Markup.button.callback('🔍 поиск', 'search')],
+    [Markup.button.callback("🚰 отправить фото вм", "sendPhoto")],
   ]),
   cheap: Markup.inlineKeyboard([
     [
