@@ -37,7 +37,9 @@ function botStart() {
   const SUPABASE_KEY = process.env.SUPABASE_KEY;
   const BUCKET_NAME = process.env.BUCKET_NAME;
   const token = process.env.TELEGRAM_TOKEN;
-  const bot = new Telegraf(token);
+  const bot = new Telegraf(token, {
+    handlerTimeout: 300000, // до 5 минут
+  });
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   async function safeReply(ctx, ...args) {
     try {
@@ -272,6 +274,11 @@ function botStart() {
     await ctx.deleteMessage();
     await User.updateOne({ user_id: userId }, { state: "insertConscode" });
     await safeReply(ctx, "Введите л/с!");
+  });
+
+  bot.catch((err, ctx) => {
+    console.error("Ошибка в боте:", err);
+    ctx.reply?.("Произошла ошибка. Пожалуйста, попробуйте позже.");
   });
 
   console.log("Bot have been started successfully.");

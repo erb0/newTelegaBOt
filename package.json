@@ -4,7 +4,14 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "start": "node index.js",
+    "pm2-start": "pm2 start index.js --name bot",
+    "pm2-stop": "pm2 stop bot",
+    "pm2-restart": "pm2 restart bot",
+    "pm2-logs": "pm2 logs bot",
+    "pm2-delete": "pm2 delete bot",
+    "pm2-save": "pm2 save"
   },
   "keywords": [],
   "author": "",
