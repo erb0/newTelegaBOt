@@ -9,9 +9,12 @@ const { log, formatDate } = require("./plugin");
 async function insertWcheapEntry(WCODE, LASTCOUNT, CURRCOUNT) {
   const date = new Date();
   const currentDate = date.toISOString().split("T")[0];
+  // const query = `
+  //   INSERT INTO WCHEAP
+  //   VALUES ('${WCODE}', '${currentDate}', ${LASTCOUNT}, ${CURRCOUNT}, null)`;
   const query = `
     INSERT INTO WCHEAP
-    VALUES ('${WCODE}', '${currentDate}', ${LASTCOUNT}, ${CURRCOUNT}, null)`;
+    VALUES (${WCODE}, #05/31/2025#,  ${LASTCOUNT}, ${CURRCOUNT}, null)`;
   await connection.execute(query);
 }
 
