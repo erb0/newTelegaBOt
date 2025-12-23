@@ -34,24 +34,10 @@ async function sendEmail(filePath, chatId, ctx) {
         pass: "sY5Myr1HqsDDV7m14hba",
       },
     });
-    // const transporter = nodemailer.createTransport({
-    //   service: "mail.ru",
-    //   auth: {
-    //     user: "too2006@mail.ru",
-    //     pass: "sY5Myr1HqsDDV7m14hba",
-    //   },
-    //   tls: {
-    //     rejectUnauthorized: false,
-    //   },
-    //   socketTimeout: 300000, // Таймаут на 5 минут
-    //   connectionTimeout: 300000, // Таймаут на 5 минут
-    //   greetingTimeout: 300000, // Таймаут на 5 минут
-    // });
 
     const mailOptions = {
       from: "too2006@mail.ru",
       to: "ib.invoices@kaspi.kz",
-      // to: "erb0_01@mail.ru",
       subject: "kaspi.xlsx",
       text: "ТОО 'Сайрам Тазалык'",
       attachments: [
@@ -61,10 +47,6 @@ async function sendEmail(filePath, chatId, ctx) {
         },
       ],
     };
-    // const { default: pTimeout } = await import("p-timeout");
-    // console.log("Отправка почты с таймаутом 300000 мс");
-    // const info = await pTimeout(transporter.sendMail(mailOptions), 300000);
-
     const info = await transporter.sendMail(mailOptions);
     console.log("Письмо с файлом успешно отправлено:", info.response);
     ctx.telegram.sendMessage(
