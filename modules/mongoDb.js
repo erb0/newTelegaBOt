@@ -6,8 +6,10 @@ const { User } = require('../models/User')
 
 async function connectToDatabase() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI)
-    console.log('Connected to MongoDB')
+    // Используем MONGODB_TOOST_URI для подключения к БД toostbot
+    const uri = process.env.MONGODB_TOOST_URI || process.env.MONGODB_URI
+    await mongoose.connect(uri)
+    console.log('Connected to MongoDB (toostbot database)')
   } catch (error) {
     console.error('Error connecting to MongoDB:', error)
   }
@@ -40,6 +42,32 @@ const logSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },
 })
 
+// Схема для логов показаний абонентов
+const insertLogSchema = new mongoose.Schema({
+  inspectorName: { type: String, required: true },
+  inspectorId: { type: Number, required: true },
+  conscode: { type: Number, required: true },
+  consname: { type: String, required: true },
+  streetName: String,
+  house: String,
+  WCODE: String,
+  CURRCOUNT: { type: Number, required: true },
+  LASTCOUNT: { type: Number, required: true },
+  diff: { type: Number, required: true },
+  timestamp: { type: Date, default: Date.now },
+})
+
+// Схема для логов ошибок
+const errorLogSchema = new mongoose.Schema({
+  errorMessage: { type: String, required: true },
+  errorStack: String,
+  context: { type: String, required: true }, // функция/модуль где произошла ошибка
+  userId: Number,
+  userName: String,
+  additionalData: mongoose.Schema.Types.Mixed,
+  timestamp: { type: Date, default: Date.now },
+})
+
 const PhotoSchema = new mongoose.Schema({
   chatId: Number,
   name: String,
@@ -48,24 +76,12 @@ const PhotoSchema = new mongoose.Schema({
   date: Date,
 })
 
-async function logInfoMongo(chatId, name, text, type, ctx) {
-  try {
-    const logEntry = new Log({
-      chatId,
-      name,
-      type,
-      data: text,
-    })
-    await logEntry.save()
-    // await ctx.telegram.sendMessage(498318670, `${name} [${type}]- ${text}`);
-  } catch (error) {
-    console.error('Ошибка при логировании в MongoDB:', error)
-  }
-}
 
 // User уже импортирован из models/User.js
 const Consumer = mongoose.model('Consumer', consumerSchema)
 const Log = mongoose.model('Log', logSchema)
+const InsertLog = mongoose.model('InsertLog', insertLogSchema)
+const ErrorLog = mongoose.model('ErrorLog', errorLogSchema)
 const Photo = mongoose.model('Photo', PhotoSchema)
 
 module.exports = {
@@ -73,6 +89,7 @@ module.exports = {
   User,
   Consumer,
   Log,
+  InsertLog,
+  ErrorLog,
   Photo,
-  logInfoMongo,
 }

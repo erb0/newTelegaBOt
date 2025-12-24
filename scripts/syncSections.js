@@ -7,7 +7,7 @@ async function syncSections() {
 
   const query = `
     SELECT GRCODE, FSBDVCODE, SBDVCODE, SECTCODE, SECTNAME, CHIEFNAME
-    FROM SECTION
+    FROM [SECTION]
     ORDER BY FSBDVCODE`
 
   try {

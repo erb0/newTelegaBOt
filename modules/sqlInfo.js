@@ -6,11 +6,9 @@ const {
   streetCodes,
 } = require("./accessDb");
 const { menu, cheap, payments, byWm } = require("./button");
-const { logInfo } = require("./plugin");
-const { authChatId } = require("./auth");
-const { logInfoMongo } = require("./mongoDb");
 const path = require("path");
 const axios = require("axios");
+const LogService = require("../services/LogService");
 
 function validateNumberInput(input, ctx) {
   if (isNaN(input)) {
@@ -39,18 +37,27 @@ async function searchByUser(locationCodeArray, searchValue, ctx, User) {
     if (!validateNumberInput(searchValue, ctx)) return;
 
     const chatId = ctx.from.id;
-    const name = authChatId[chatId]?.name || "Неизвестный";
-    logInfo(chatId, name, searchValue, "Лсчет", ctx);
-    logInfoMongo(chatId, name, searchValue, "Лсчет", ctx);
+
+    // Получить имя из MongoDB
+    const currentUser = await User.findOne({ user_id: chatId });
+    const name = currentUser?.first_name || "Неизвестный";
+
+    // Логирование через LogService
+    const logService = new LogService();
+    await logService.logSearch(chatId, name, "Лсчет", searchValue, ctx);
     await checkConnection();
+
+    // Если locationCodeArray = null, админ/ревизор может искать по всем участкам
+    const whereClause = locationCodeArray === null
+      ? `WHERE CONSUM.CONSCODE = ${searchValue}`
+      : `WHERE CONSUM.FSBDVCODE IN (${locationCodeArray}) AND CONSUM.CONSCODE = ${searchValue}`;
 
     const query = `SELECT CONSUM.CONSNAME AS consname, CONSUM.STRTCODE AS streetCode, CONSUM.HOUSE AS house,
                    зTOTPAY_ALL_Тек.Долг AS debt, зTOTPAY_ALL_Тек.ДатаРсч AS dateRep,
                    зTOTPAY_ALL_Тек.ТрфПит AS w, зTOTPAY_ALL_Тек.ТрфКан AS ww
-                   FROM CONSUM INNER JOIN зTOTPAY_ALL_Тек 
+                   FROM CONSUM INNER JOIN зTOTPAY_ALL_Тек
                    ON CONSUM.CONSCODE = зTOTPAY_ALL_Тек.CONSCODE
-                   WHERE CONSUM.FSBDVCODE IN (${locationCodeArray}) 
-                   AND CONSUM.CONSCODE = ${searchValue};`;
+                   ${whereClause};`;
 
     const data = await connection.query(query);
 
@@ -84,6 +91,8 @@ async function searchByUser(locationCodeArray, searchValue, ctx, User) {
       await ctx.reply(`Нет результатов для л/с ${searchValue}`);
     }
   } catch (error) {
+    const logService = new LogService();
+    await logService.logError(error, "searchByUser", ctx.from.id, currentUser?.first_name);
     console.error("Ошибка при выполнении запроса:", error);
     await ctx.reply(
       "Произошла ошибка при выполнении запроса. Попробуйте позже."
@@ -91,12 +100,18 @@ async function searchByUser(locationCodeArray, searchValue, ctx, User) {
   }
 }
 
-async function searchWmOrName(text, ctx, searchField) {
+async function searchWmOrName(text, ctx, searchField, User) {
   try {
     await checkConnection();
     const chatId = ctx.from.id;
-    const name = authChatId[chatId]?.name || "Неизвестный";
-    logInfo(chatId, name, text, searchField === "wm" ? "в/м" : "фио", ctx);
+
+    // Получить имя из MongoDB
+    const currentUser = await User.findOne({ user_id: chatId });
+    const name = currentUser?.first_name || "Неизвестный";
+
+    // Логирование через LogService
+    const logService = new LogService();
+    await logService.logSearch(chatId, name, searchField === "wm" ? "в/м" : "фио", text, ctx);
 
     const query = `SELECT * FROM з_АбонентыВМ WHERE [${searchField}] LIKE '%${text}%'`;
     const data = await connection.query(query);
@@ -116,13 +131,16 @@ async function searchWmOrName(text, ctx, searchField) {
       );
     }
   } catch (error) {
+    const logService = new LogService();
+    const currentUser = await User.findOne({ user_id: ctx.from.id });
+    await logService.logError(error, "searchWmOrName", ctx.from.id, currentUser?.first_name);
     console.error("Ошибка при выполнении запроса:", error);
   }
 }
 
-const searchByWm = (text, ctx) =>
-  validateNumberInput(text, ctx) && searchWmOrName(text, ctx, "wm");
-const searchByName = (text, ctx) => searchWmOrName(text, ctx, "name");
+const searchByWm = (text, ctx, User) =>
+  validateNumberInput(text, ctx) && searchWmOrName(text, ctx, "wm", User);
+const searchByName = (text, ctx, User) => searchWmOrName(text, ctx, "name", User);
 
 async function searchPayment(User, ctx) {
   try {
@@ -164,6 +182,9 @@ async function searchPayment(User, ctx) {
       ctx.reply(`Нет результатов для л/с ${user.data.searchValue}`);
     }
   } catch (error) {
+    const logService = new LogService();
+    const user = await User.findOne({ user_id: ctx.from.id });
+    await logService.logError(error, "searchPayment", ctx.from.id, user?.first_name);
     console.error("Ошибка при выполнении запроса:", error);
   }
 }
@@ -212,6 +233,9 @@ async function searchCheap(User, ctx) {
     user.data.sentMessage = sentMessage.message_id;
     await user.save();
   } catch (error) {
+    const logService = new LogService();
+    const user = await User.findOne({ user_id: ctx.from.id });
+    await logService.logError(error, "searchCheap", ctx.from.id, user?.first_name);
     console.error("Ошибка при выполнении запроса:", error);
   }
 }
@@ -230,6 +254,9 @@ async function back(User, ctx) {
     user.data.sentMessage = sentMessage.message_id;
     await user.save();
   } catch (error) {
+    const logService = new LogService();
+    const user = await User.findOne({ user_id: ctx.from.id });
+    await logService.logError(error, "back", ctx.from.id, user?.first_name);
     console.error("Ошибка при выполнении запроса:", error);
   }
 }
@@ -296,6 +323,8 @@ async function handlePhotoUpload(ctx, conscode, supabase, PhotoModel) {
 
     await ctx.reply("✅ Фото успешно загружено!");
   } catch (err) {
+    const logService = new LogService();
+    await logService.logError(err, "handlePhotoUpload", ctx.chat.id, ctx.from.first_name, { conscode });
     console.error("Ошибка при загрузке фото:", err);
     await ctx.reply("⚠️ Произошла ошибка при загрузке фото");
   }

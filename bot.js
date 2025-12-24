@@ -2,6 +2,7 @@ const { Telegraf } = require("telegraf");
 require("dotenv").config();
 const { connectToDatabase, User, Log, Photo } = require("./modules/mongoDb");
 const { search, clear } = require("./modules/button");
+const LogService = require("./services/LogService");
 
 const { createClient } = require("@supabase/supabase-js");
 const {
@@ -26,9 +27,11 @@ const {
   insertValue,
   insertIfYes,
 } = require("./modules/sqlInsert");
-const { exportMongoLogsToExcel } = require("./modules/plugin");
 
-const { authChatId, auth } = require("./modules/auth");
+// Новая система RBAC
+const { ROLES } = require("./models/User");
+const { ensureAuth: ensureAuthMiddleware, canInsertReadings, requireRole } = require("./middlewares/auth");
+const { setupAdminCommands } = require("./bot-admin");
 
 connectToDatabase();
 
@@ -40,6 +43,10 @@ function botStart() {
   const bot = new Telegraf(token, {
     handlerTimeout: 300000, // до 5 минут
   });
+
+  // Подключить команды администратора (новая система RBAC)
+  setupAdminCommands(bot);
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   async function safeReply(ctx, ...args) {
     try {
@@ -53,11 +60,6 @@ function botStart() {
     }
   }
 
-  const ensureAuth = async (ctx, next) => {
-    if (!authChatId[ctx.from.id]) return ctx.reply("Вы не авторизованы!");
-    return next();
-  };
-
   const stateHandlers = {
     didntPay: async (text, ctx) => {
       await didntPay(text, ctx, connection);
@@ -69,13 +71,23 @@ function botStart() {
       for (const part of parts) await safeReply(ctx, part);
     },
     searchbyuser: async (text, ctx, user) => {
-      const codes = authChatId[user.user_id]?.section;
-      if (!codes) return ctx.reply("Нет доступа.");
-      const codeArray = codes.map((v) => `'${v}'`).join(",");
-      searchByUser(codeArray, text, ctx, User);
+      // Получить доступные участки из новой системы RBAC
+      const accessibleSections = await user.getAccessibleSections();
+
+      let codeArray;
+      if (accessibleSections === null) {
+        // Админ/Ревизор - доступ ко всем участкам
+        codeArray = null; // null означает доступ ко всем
+      } else if (accessibleSections.length === 0) {
+        return ctx.reply("❌ У вас нет доступных участков. Обратитесь к администратору.");
+      } else {
+        codeArray = accessibleSections.map((v) => `'${v}'`).join(",");
+      }
+
+      await searchByUser(codeArray, text, ctx, User);
     },
-    searchwm: (text, ctx) => searchByWm(text, ctx),
-    searchbyname: (text, ctx) => searchByName(text, ctx),
+    searchwm: (text, ctx) => searchByWm(text, ctx, User),
+    searchbyname: (text, ctx) => searchByName(text, ctx, User),
     insertConscode: (text, ctx, user) =>
       userInfoForInsert(user.user_id, text, ctx, User),
     insertValue: (text, ctx, user) =>
@@ -83,45 +95,53 @@ function botStart() {
   };
 
   bot.command("start", async (ctx) => {
-    if (!authChatId[ctx.from.id]) return ctx.reply("Вы не авторизованы!");
+    // Проверка авторизации в новой системе RBAC
+    let user = await User.findOne({ user_id: ctx.from.id });
+
+    if (!user) {
+      // Новые пользователи НЕ создаются автоматически
+      return ctx.reply("❌ Вы не авторизованы! Обратитесь к администратору для получения доступа.");
+    }
+
+    if (user.is_blocked) {
+      return ctx.reply("❌ Ваш аккаунт заблокирован! Обратитесь к администратору.");
+    }
+
+    if (!user.is_active) {
+      return ctx.reply("❌ Ваш аккаунт неактивен! Обратитесь к администратору.");
+    }
+
+    // Обновление информации о последнем входе
+    user.last_login = new Date();
+    user.state = "start";
+    await user.save();
+
     await safeReply(
       ctx,
-      `Привет ${ctx.from.first_name || "unknown"}! Добро пожаловать!
-Доступные команды:
-/info - Для получение информаций об абонентах
-/insert - Для внесение показания абонентов
-/list - Коды контролеров
-/didntpay - Списки не оплативших абонентов по коду контролера`
-    );
+      `Привет ${user.first_name || ctx.from.first_name || "unknown"}! Добро пожаловать!
 
-    let user = await User.findOne({ user_id: ctx.from.id });
-    if (!user) {
-      user = new User({
-        user_id: ctx.from.id,
-        username: ctx.from.username,
-        first_name: ctx.from.first_name,
-        last_name: ctx.from.last_name,
-        language_code: ctx.from.language_code,
-        state: "start",
-        privileges: "user",
-        created_at: new Date(),
-      });
-      await user.save();
-    } else {
-      await User.updateOne({ user_id: ctx.from.id }, { state: "start" });
-    }
+👤 Роль: <b>${user.role}</b>
+📊 Участков: ${user.sections?.length || 0}
+
+Доступные команды:
+/info - Для получения информации об абонентах
+/insert - Для внесения показаний абонентов
+/list - Коды контролеров
+/didntpay - Списки не оплативших абонентов по коду контролера
+${user.role === ROLES.ADMIN ? '\n🔧 /adminhelp - Команды администратора' : ''}`
+    );
   });
 
-  bot.command("didntpay", ensureAuth, async (ctx) => {
+  bot.command("didntpay", ensureAuthMiddleware, async (ctx) => {
     await safeReply(ctx, `Введите код контролера.\n*коды контролеров /list`);
     await User.updateOne({ user_id: ctx.from.id }, { state: "didntPay" });
   });
 
-  bot.command("info", ensureAuth, async (ctx) => {
+  bot.command("info", ensureAuthMiddleware, async (ctx) => {
     await safeReply(ctx, "Выберите тип поиска", search);
   });
 
-  bot.command("list", ensureAuth, async (ctx) => {
+  bot.command("list", ensureAuthMiddleware, async (ctx) => {
     await safeReply(
       ctx,
       "Введите ФИО контролера или наименование сельского округа."
@@ -129,11 +149,12 @@ function botStart() {
     await User.updateOne({ user_id: ctx.from.id }, { state: "list" });
   });
 
-  bot.command("insert", ensureAuth, async (ctx) => {
-    const chatId = ctx.chat.id;
+  bot.command("insert", ensureAuthMiddleware, canInsertReadings, async (ctx) => {
+    const user = ctx.state.user; // Пользователь доступен через ctx.state
+
     await safeReply(
       ctx,
-      `Вы вошли как <i><b>${authChatId[chatId].name}</b></i>`
+      `Вы вошли как <i><b>${user.first_name}</b></i>\nРоль: <b>${user.role}</b>`
     );
     await User.updateOne({ user_id: ctx.from.id }, { state: "insertConscode" });
     await safeReply(
@@ -149,10 +170,92 @@ function botStart() {
     await main(ctx.chat.id, connection, bot);
   });
 
-  bot.command("mongo", async (ctx) => {
-    if (ctx.chat.id !== 498318670)
-      return await safeReply(ctx, "У вас нет доступа для этой команды!");
-    await exportMongoLogsToExcel(Log, ctx);
+  // Старая команда /mongo заменена на /export_search
+  // Используйте /export_search, /export_insert, /export_errors или /export_all
+
+  // ========== НОВЫЕ КОМАНДЫ ЭКСПОРТА ЛОГОВ ==========
+
+  bot.command("export_search", ensureAuthMiddleware, requireRole(ROLES.ADMIN), async (ctx) => {
+    try {
+      await ctx.reply("🔄 Экспортирую логи поиска...");
+      const logService = new LogService(bot);
+      const filePath = await logService.exportSearchLogs();
+      await ctx.replyWithDocument({ source: filePath });
+      await ctx.reply("✅ Логи поиска успешно экспортированы!");
+    } catch (error) {
+      const logService = new LogService();
+      await logService.logError(error, "bot.export_search", ctx.chat.id, ctx.from.first_name);
+      await ctx.reply(`❌ Ошибка при экспорте: ${error.message}`);
+    }
+  });
+
+  bot.command("export_insert", ensureAuthMiddleware, requireRole(ROLES.ADMIN), async (ctx) => {
+    try {
+      await ctx.reply("🔄 Экспортирую логи показаний...");
+      const logService = new LogService(bot);
+      const filePath = await logService.exportInsertLogs();
+      await ctx.replyWithDocument({ source: filePath });
+      await ctx.reply("✅ Логи показаний успешно экспортированы!");
+    } catch (error) {
+      const logService = new LogService();
+      await logService.logError(error, "bot.export_insert", ctx.chat.id, ctx.from.first_name);
+      await ctx.reply(`❌ Ошибка при экспорте: ${error.message}`);
+    }
+  });
+
+  bot.command("export_errors", ensureAuthMiddleware, requireRole(ROLES.ADMIN), async (ctx) => {
+    try {
+      await ctx.reply("🔄 Экспортирую логи ошибок...");
+      const logService = new LogService(bot);
+      const filePath = await logService.exportErrorLogs();
+      await ctx.replyWithDocument({ source: filePath });
+      await ctx.reply("✅ Логи ошибок успешно экспортированы!");
+    } catch (error) {
+      const logService = new LogService();
+      await logService.logError(error, "bot.export_errors", ctx.chat.id, ctx.from.first_name);
+      await ctx.reply(`❌ Ошибка при экспорте: ${error.message}`);
+    }
+  });
+
+  bot.command("export_all", ensureAuthMiddleware, requireRole(ROLES.ADMIN), async (ctx) => {
+    try {
+      await ctx.reply("🔄 Экспортирую все логи (это может занять время)...");
+      const logService = new LogService(bot);
+      const filePath = await logService.exportAllLogs();
+      await ctx.replyWithDocument({ source: filePath });
+      await ctx.reply("✅ Все логи успешно экспортированы!");
+    } catch (error) {
+      const logService = new LogService();
+      await logService.logError(error, "bot.export_all", ctx.chat.id, ctx.from.first_name);
+      await ctx.reply(`❌ Ошибка при экспорте: ${error.message}`);
+    }
+  });
+
+  bot.command("logs_stats", ensureAuthMiddleware, requireRole(ROLES.ADMIN), async (ctx) => {
+    try {
+      const logService = new LogService();
+      const stats = await logService.getStatistics();
+
+      const message = `📊 Статистика логов:
+
+🔍 Логи поиска: ${stats.searchLogs}
+📝 Логи показаний: ${stats.insertLogs}
+❌ Логи ошибок: ${stats.errorLogs}
+━━━━━━━━━━━━━━━━━━
+📁 Всего записей: ${stats.total}
+
+Команды экспорта:
+/export_search - Экспорт логов поиска
+/export_insert - Экспорт логов показаний
+/export_errors - Экспорт логов ошибок
+/export_all - Экспорт всех логов`;
+
+      await ctx.reply(message);
+    } catch (error) {
+      const logService = new LogService();
+      await logService.logError(error, "bot.logs_stats", ctx.chat.id, ctx.from.first_name);
+      await ctx.reply("❌ Ошибка при получении статистики");
+    }
   });
 
   bot.command("photos", async (ctx) => {
@@ -185,9 +288,14 @@ function botStart() {
   bot.on("text", async (ctx) => {
     const userId = ctx.from.id;
     const text = ctx.message.text;
-    if (!authChatId[userId]) return ctx.reply("Вы не авторизованы!");
 
+    // Проверка авторизации через новую систему RBAC
     const user = await User.findOne({ user_id: userId });
+
+    if (!user || user.is_blocked || !user.is_active) {
+      return ctx.reply("❌ Вы не авторизованы!");
+    }
+
     const state = user?.state;
 
     const buttonActions = {
@@ -233,9 +341,9 @@ function botStart() {
     }
   });
 
-  bot.action("payments", ensureAuth, (ctx) => searchPayment(User, ctx));
-  bot.action("cheap", ensureAuth, (ctx) => searchCheap(User, ctx));
-  bot.action("back", ensureAuth, (ctx) => back(User, ctx));
+  bot.action("payments", ensureAuthMiddleware, (ctx) => searchPayment(User, ctx));
+  bot.action("cheap", ensureAuthMiddleware, (ctx) => searchCheap(User, ctx));
+  bot.action("back", ensureAuthMiddleware, (ctx) => back(User, ctx));
   bot.action("sendPhoto", async (ctx) => {
     try {
       // Удаляем инлайн-кнопки
@@ -255,12 +363,24 @@ function botStart() {
     }
   });
 
-  bot.action(/searchUser_(.+)/, ensureAuth, async (ctx) => {
+  bot.action(/searchUser_(.+)/, ensureAuthMiddleware, async (ctx) => {
     const text = ctx.match[1];
-    const codes = authChatId[ctx.from.id]?.section;
-    if (!codes) return ctx.reply("Нет доступа.");
-    const codeArray = codes.map((v) => `'${v}'`).join(",");
-    searchByUser(codeArray, text, ctx, User);
+    const user = ctx.state.user; // Пользователь из middleware
+
+    // Получить доступные участки из новой системы RBAC
+    const accessibleSections = await user.getAccessibleSections();
+
+    let codeArray;
+    if (accessibleSections === null) {
+      // Админ/Ревизор - доступ ко всем участкам
+      codeArray = null;
+    } else if (accessibleSections.length === 0) {
+      return ctx.reply("❌ У вас нет доступных участков. Обратитесь к администратору.");
+    } else {
+      codeArray = accessibleSections.map((v) => `'${v}'`).join(",");
+    }
+
+    await searchByUser(codeArray, text, ctx, User);
     await User.updateOne({ user_id: ctx.from.id }, { state: "info" });
   });
 
@@ -276,8 +396,22 @@ function botStart() {
     await safeReply(ctx, "Введите л/с!");
   });
 
-  bot.catch((err, ctx) => {
+  bot.catch(async (err, ctx) => {
     console.error("Ошибка в боте:", err);
+
+    // Глобальное логирование ошибок
+    const logService = new LogService();
+    await logService.logError(
+      err,
+      "bot.globalErrorHandler",
+      ctx?.from?.id,
+      ctx?.from?.first_name,
+      {
+        updateType: ctx?.updateType,
+        chatId: ctx?.chat?.id,
+      }
+    );
+
     ctx.reply?.("Произошла ошибка. Пожалуйста, попробуйте позже.");
   });
 

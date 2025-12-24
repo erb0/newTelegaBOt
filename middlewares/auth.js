@@ -28,6 +28,11 @@ function requireRole(...roles) {
   return async (ctx, next) => {
     const user = ctx.state.user
 
+    // Проверка что пользователь существует
+    if (!user) {
+      return ctx.reply('❌ Вы не авторизованы!')
+    }
+
     if (!roles.includes(user.role)) {
       return ctx.reply('❌ Недостаточно прав!')
     }
@@ -40,6 +45,11 @@ function requireRole(...roles) {
 function requirePermission(...permissions) {
   return async (ctx, next) => {
     const user = ctx.state.user
+
+    // Проверка что пользователь существует
+    if (!user) {
+      return ctx.reply('❌ Вы не авторизованы!')
+    }
 
     const hasPermission = permissions.some(perm =>
       user.permissions.includes(perm)
@@ -57,6 +67,11 @@ function requirePermission(...permissions) {
 function canInsertReadings(ctx, next) {
   const user = ctx.state.user
 
+  // Проверка что пользователь существует
+  if (!user) {
+    return ctx.reply('❌ Вы не авторизованы!')
+  }
+
   if (!user.can_insert_readings) {
     return ctx.reply('❌ У вас нет права вносить показания!')
   }
@@ -68,6 +83,11 @@ function canInsertReadings(ctx, next) {
 function canAccessSection(sectionCode) {
   return async (ctx, next) => {
     const user = ctx.state.user
+
+    // Проверка что пользователь существует
+    if (!user) {
+      return ctx.reply('❌ Вы не авторизованы!')
+    }
 
     if (await user.canAccessSection(sectionCode)) {
       return next()

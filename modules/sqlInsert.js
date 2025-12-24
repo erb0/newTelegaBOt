@@ -2,8 +2,7 @@
 const { Markup } = require("telegraf");
 const { restart, yes } = require("./button");
 const { connection, checkConnection, streetCodes } = require("./accessDb");
-const { authChatId } = require("./auth");
-const { log, formatDate } = require("./plugin");
+const LogService = require("../services/LogService");
 
 // 💧 Универсальная вставка в WCHEAP
 async function insertWcheapEntry(WCODE, LASTCOUNT, CURRCOUNT) {
@@ -37,7 +36,9 @@ function getCurrentMonthYear() {
 
 async function userInfoForInsert(userId, text, ctx, User) {
   try {
-    if (!authChatId[userId]) {
+    const user = await User.findOne({ user_id: userId, is_active: true, is_blocked: false });
+
+    if (!user) {
       await User.updateOne({ user_id: userId }, { state: "null" });
       return ctx.replyWithHTML("Вы не авторизовались");
     }
@@ -46,9 +47,7 @@ async function userInfoForInsert(userId, text, ctx, User) {
       return ctx.reply("Введите положительное число!");
     }
 
-    const user = await User.findOne({ user_id: userId });
-
-    const locationCodeArray = authChatId[userId].section
+    const locationCodeArray = user.allowed_sections
       .map((value) => `'${value}'`)
       .join(",");
 
@@ -99,6 +98,9 @@ AND WCOUNT.CONSCODE = ${text}`;
       ctx.reply("Нет данных для введенного номера.");
     }
   } catch (error) {
+    const logService = new LogService();
+    const user = await User.findOne({ user_id: userId });
+    await logService.logError(error, "userInfoForInsert", userId, user?.first_name);
     console.error("Ошибка при выполнении запроса:", error);
     ctx.reply("Произошла ошибка при выполнении команды.");
   }
@@ -156,6 +158,9 @@ async function wcodeInfoForInsert(ctx, User) {
       await ctx.reply("Некорректное состояние пользователя.");
     }
   } catch (e) {
+    const logService = new LogService();
+    const user = await User.findOne({ user_id: ctx.chat.id });
+    await logService.logError(e, "wcodeInfoForInsert", ctx.chat.id, user?.first_name);
     console.error("Ошибка при обработке запроса:", e);
     await ctx.reply(
       "Произошла ошибка при выполнении команды. Попробуйте снова позже."
@@ -189,7 +194,20 @@ async function insertValue(chatId, text, ctx, User) {
       await insertWcheapEntry(WCODE, LASTCOUNT, CURRCOUNT);
       await ctx.reply("Данные успешно вставлены.\nВведите другой л/с!");
       await User.updateOne({ user_id: chatId }, { state: "insertConscode" });
-      await log(user, authChatId, chatId, ctx);
+
+      // Логирование через LogService
+      const logService = new LogService();
+      await logService.logInsert({
+        inspectorName: user.first_name,
+        inspectorId: chatId,
+        conscode: user.data.conscode,
+        consname: user.data.consname,
+        streetName: user.data.streetName,
+        house: user.data.house,
+        WCODE,
+        CURRCOUNT,
+        LASTCOUNT,
+      }, ctx);
     } else {
       return ctx.replyWithHTML(
         `Внесенные данные меньше последнего показания <b>[${CURRCOUNT}]</b>\nВнесите другое значение или воспользуйтесь кнопкой для выбора другого л/c!`,
@@ -197,6 +215,9 @@ async function insertValue(chatId, text, ctx, User) {
       );
     }
   } catch (error) {
+    const logService = new LogService();
+    const user = await User.findOne({ user_id: chatId });
+    await logService.logError(error, "insertValue", chatId, user?.first_name, { WCODE, CURRCOUNT, LASTCOUNT: text });
     console.log("Общая ошибка:", error);
     return ctx.reply("Произошла ошибка. Попробуйте еще раз позже.");
   }
@@ -213,8 +234,23 @@ async function insertIfYes(ctx, User) {
     await insertWcheapEntry(WCODE, LASTCOUNT, CURRCOUNT);
     await ctx.reply("Данные успешно вставлены.\nВведите л/с!");
     await User.updateOne({ user_id: chatId }, { state: "insertConscode" });
-    await log(user, authChatId, chatId, ctx);
+
+    // Логирование через LogService
+    const logService = new LogService();
+    await logService.logInsert({
+      inspectorName: user.first_name,
+      inspectorId: chatId,
+      conscode: user.data.conscode,
+      consname: user.data.consname,
+      streetName: user.data.streetName,
+      house: user.data.house,
+      WCODE,
+      CURRCOUNT,
+      LASTCOUNT,
+    }, ctx);
   } catch (error) {
+    const logService = new LogService();
+    await logService.logError(error, "insertIfYes", chatId, user?.first_name);
     console.log("Ошибка insertIfYes", error);
     await ctx.reply("Ошибка при вставке данных. Попробуйте еще раз.");
   }
