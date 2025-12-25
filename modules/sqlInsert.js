@@ -1,7 +1,7 @@
 // файл: waterInsertHandler.js
 const { Markup } = require("telegraf");
 const { restart, yes } = require("./button");
-const { connection, checkConnection, streetCodes } = require("./accessDb");
+const { query, accessDbManager } = require("./accessDb");
 const LogService = require("../services/LogService");
 
 // 💧 Универсальная вставка в WCHEAP
@@ -47,34 +47,48 @@ async function userInfoForInsert(userId, text, ctx, User) {
       return ctx.reply("Введите положительное число!");
     }
 
-    const locationCodeArray = user.allowed_sections
-      .map((value) => `'${value}'`)
-      .join(",");
+    // Получить доступные участки из новой системы RBAC
+    const accessibleSections = await user.getAccessibleSections();
 
-    await checkConnection();
+    let locationCodeArray;
 
-    const query = `
-SELECT 
+    if (accessibleSections === null) {
+      // Админ/Ревизор имеет доступ ко всем участкам
+      // Не ограничиваем поиск по участкам - ищем по всей базе
+      locationCodeArray = null;
+    } else if (!accessibleSections || accessibleSections.length === 0) {
+      return ctx.reply("❌ У вас нет доступных участков. Обратитесь к администратору.");
+    } else {
+      locationCodeArray = accessibleSections
+        .map((value) => `'${value}'`)
+        .join(",");
+    }
+
+    // Построение WHERE клаузы в зависимости от прав доступа
+    const whereClause = locationCodeArray === null
+      ? `WHERE WCOUNT.CONSCODE = ${text}`
+      : `WHERE CONSUM.FSBDVCODE IN (${locationCodeArray}) AND WCOUNT.CONSCODE = ${text}`;
+
+    const sqlQuery = `
+SELECT
 CONSUM.CONSNAME AS consname,
 CONSUM.FSBDVCODE,
 CONSUM.STRTCODE AS streetCode,
-CONSUM.HOUSE AS house, 
-CONSUM.CONSCODE AS conscode, 
-WCOUNT.FACTNUMB AS wmNumber, 
+CONSUM.HOUSE AS house,
+CONSUM.CONSCODE AS conscode,
+WCOUNT.FACTNUMB AS wmNumber,
 WCOUNT.WCODE AS wcode
 FROM CONSUM
-INNER JOIN WCOUNT 
+INNER JOIN WCOUNT
 ON CONSUM.CONSCODE = WCOUNT.CONSCODE
-WHERE CONSUM.FSBDVCODE 
-IN (${locationCodeArray}) 
-AND WCOUNT.CONSCODE = ${text}`;
+${whereClause}`;
 
-    const data = await connection.query(query);
+    const data = await query(sqlQuery);
 
     if (data.length > 0) {
       const buttons = [];
       const { consname, streetCode, house, conscode } = data[0];
-      const streetName = streetCodes[streetCode];
+      const streetName = accessDbManager.streetCodes[streetCode];
 
       let profile = `
 👤 <b>[ ${conscode} ]</b>  <b><i>${consname}</i></b>
@@ -114,9 +128,7 @@ async function wcodeInfoForInsert(ctx, User) {
     const user = await User.findOne({ user_id: chatId });
 
     if (user.state === "insertWaterNumber") {
-      await checkConnection();
-
-      let data = await connection.query(`
+      let data = await query(`
         SELECT TOP 1 WCODE, Format([LASTDATE], 'mm.yyyy') AS FormattedDate, CURRCOUNT
         FROM WCHEAP
         WHERE WCODE = ${wcode}
@@ -126,7 +138,7 @@ async function wcodeInfoForInsert(ctx, User) {
       const nowDate = getCurrentMonthYear();
 
       if (!data[0]) {
-        data = await connection.query(`
+        data = await query(`
           SELECT WCODE, Format([DATESET], 'mm.yyyy') AS FormattedDate, STARTCOUNT AS CURRCOUNT
           FROM WCOUNT
           WHERE WCODE = ${wcode}`);

@@ -1,18 +1,24 @@
 const botStart = require("./bot");
-const { main } = require("./modules/accessDb");
+const { accessDbManager } = require("./modules/accessDb");
 
 async function initializeApp() {
   try {
-    // Инициализация базы данных и заполнение объектов кодов
-    await main();
+    console.log("Инициализация приложения...");
+
+    // Инициализация AccessDB и загрузка справочников
+    await accessDbManager.initialize();
+
+    // Запуск автообновления кеша каждый час
+    accessDbManager.startAutoRefresh();
 
     // Запуск бота
     const bot = botStart();
     bot.launch();
 
-    console.log("Application has been initialized successfully.");
+    console.log("✅ Приложение успешно запущено");
   } catch (error) {
-    console.error("Error initializing the application:", error);
+    console.error("❌ Ошибка инициализации приложения:", error);
+    process.exit(1);
   }
 }
 

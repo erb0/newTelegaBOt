@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const fontkit = require("@pdf-lib/fontkit");
 const { PDFDocument, rgb } = require("pdf-lib");
-const { locationCodes } = require("../accessDb");
+const { accessDbManager } = require("../accessDb");
 const { formatDate } = require("../plugin");
 
 async function wmNotTaken(value, ctx, connection) {
@@ -26,7 +26,7 @@ async function wmNotTaken(value, ctx, connection) {
     const data = await connection.query(query);
 
     if (data && data.length > 0) {
-      const locationName = locationCodes[value]; // Убедитесь, что locationCodes определен
+      const locationName = accessDbManager.locationCodes[value];
       if (!locationName) {
         await ctx.reply(`Неизвестный код местоположения: ${value}`);
         return;

@@ -5,11 +5,7 @@ const { search, clear } = require("./modules/button");
 const LogService = require("./services/LogService");
 
 const { createClient } = require("@supabase/supabase-js");
-const {
-  connection,
-  parseObjText,
-  locationCodes,
-} = require("./modules/accessDb");
+const { accessDbManager } = require("./modules/accessDb");
 const { didntPay } = require("./modules/reports/didntPay");
 const { main } = require("./modules/reports/reportKaspi");
 const {
@@ -62,10 +58,10 @@ function botStart() {
 
   const stateHandlers = {
     didntPay: async (text, ctx) => {
-      await didntPay(text, ctx, connection);
+      await didntPay(text, ctx, accessDbManager.connection);
     },
     list: async (text, ctx) => {
-      const message = parseObjText(locationCodes, text);
+      const message = accessDbManager.parseObjText(accessDbManager.locationCodes, text);
       if (!message.trim()) return safeReply(ctx, "Ничего не найдено.");
       const parts = message.match(/.{1,4000}(\n|$)/g);
       for (const part of parts) await safeReply(ctx, part);
@@ -167,7 +163,7 @@ ${user.role === ROLES.ADMIN ? '\n🔧 /adminhelp - Команды админис
   bot.command("kaspi", async (ctx) => {
     if (ctx.chat.id !== 498318670)
       return await safeReply(ctx, "У вас нет доступа для этой команды!");
-    await main(ctx.chat.id, connection, bot);
+    await main(ctx.chat.id, accessDbManager.connection, bot);
   });
 
   // Старая команда /mongo заменена на /export_search

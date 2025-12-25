@@ -1,5 +1,5 @@
 const { Section } = require('../models/Section')
-const { connection } = require('../modules/accessDb')
+const { connection, accessDbManager } = require('../modules/accessDb')
 const { connectToDatabase } = require('../modules/mongoDb')
 
 async function syncSections() {
@@ -57,7 +57,10 @@ async function syncSections() {
 
 // Запуск скрипта
 if (require.main === module) {
-  connectToDatabase()
+  Promise.all([
+    connectToDatabase(),
+    accessDbManager.initialize()
+  ])
     .then(() => syncSections())
     .then(() => {
       console.log('✅ Скрипт завершен успешно')

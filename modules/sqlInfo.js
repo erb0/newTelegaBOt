@@ -1,10 +1,4 @@
-const {
-  connection,
-  checkConnection,
-  deskCodes,
-  paymentCodes,
-  streetCodes,
-} = require("./accessDb");
+const { query, accessDbManager } = require("./accessDb");
 const { menu, cheap, payments, byWm } = require("./button");
 const path = require("path");
 const axios = require("axios");
@@ -20,7 +14,7 @@ function validateNumberInput(input, ctx) {
 
 function buildUserProfile(data, searchValue) {
   const { consname, streetCode, house, debt, dateRep, w, ww } = data;
-  const streetName = streetCodes[streetCode] || "Неизвестная улица";
+  const streetName = accessDbManager.streetCodes[streetCode] || "Неизвестная улица";
   const wCheckBox = w > 0 ? "✅" : "❌";
   const wwCheckBox = ww > 0 ? "✅" : "❌";
   return `👤 ( ${searchValue} ) ${consname}
@@ -33,33 +27,33 @@ ${wwCheckBox} канализация: ${ww.toFixed(2)} тг`;
 }
 
 async function searchByUser(locationCodeArray, searchValue, ctx, User) {
+  let currentUser; // Declare outside try block for catch block access
   try {
     if (!validateNumberInput(searchValue, ctx)) return;
 
     const chatId = ctx.from.id;
 
     // Получить имя из MongoDB
-    const currentUser = await User.findOne({ user_id: chatId });
+    currentUser = await User.findOne({ user_id: chatId });
     const name = currentUser?.first_name || "Неизвестный";
 
     // Логирование через LogService
     const logService = new LogService();
     await logService.logSearch(chatId, name, "Лсчет", searchValue, ctx);
-    await checkConnection();
 
     // Если locationCodeArray = null, админ/ревизор может искать по всем участкам
     const whereClause = locationCodeArray === null
       ? `WHERE CONSUM.CONSCODE = ${searchValue}`
       : `WHERE CONSUM.FSBDVCODE IN (${locationCodeArray}) AND CONSUM.CONSCODE = ${searchValue}`;
 
-    const query = `SELECT CONSUM.CONSNAME AS consname, CONSUM.STRTCODE AS streetCode, CONSUM.HOUSE AS house,
+    const sqlQuery = `SELECT CONSUM.CONSNAME AS consname, CONSUM.STRTCODE AS streetCode, CONSUM.HOUSE AS house,
                    зTOTPAY_ALL_Тек.Долг AS debt, зTOTPAY_ALL_Тек.ДатаРсч AS dateRep,
                    зTOTPAY_ALL_Тек.ТрфПит AS w, зTOTPAY_ALL_Тек.ТрфКан AS ww
                    FROM CONSUM INNER JOIN зTOTPAY_ALL_Тек
                    ON CONSUM.CONSCODE = зTOTPAY_ALL_Тек.CONSCODE
                    ${whereClause};`;
 
-    const data = await connection.query(query);
+    const data = await query(sqlQuery);
 
     if (data.length > 0) {
       const userProfile = buildUserProfile(data[0], searchValue);
@@ -101,20 +95,20 @@ async function searchByUser(locationCodeArray, searchValue, ctx, User) {
 }
 
 async function searchWmOrName(text, ctx, searchField, User) {
+  let currentUser; // Declare outside try block for catch block access
   try {
-    await checkConnection();
     const chatId = ctx.from.id;
 
     // Получить имя из MongoDB
-    const currentUser = await User.findOne({ user_id: chatId });
+    currentUser = await User.findOne({ user_id: chatId });
     const name = currentUser?.first_name || "Неизвестный";
 
     // Логирование через LogService
     const logService = new LogService();
     await logService.logSearch(chatId, name, searchField === "wm" ? "в/м" : "фио", text, ctx);
 
-    const query = `SELECT * FROM з_АбонентыВМ WHERE [${searchField}] LIKE '%${text}%'`;
-    const data = await connection.query(query);
+    const sqlQuery = `SELECT * FROM з_АбонентыВМ WHERE [${searchField}] LIKE '%${text}%'`;
+    const data = await query(sqlQuery);
 
     if (data.length > 0) {
       for (const { userId, user, location, wm } of data) {
@@ -150,21 +144,20 @@ async function searchPayment(User, ctx) {
     let message = `👤 ( ${user.data.searchValue} ) ${user.data.consname}
 Список последних оплат:
 📅 Дата 💳 Касса 📑 Вид.опл 💰 Сумма\n`;
-    const sqlQuery = `SELECT TOP 12 SUMMA AS summa, 
-                      PDESKCODE AS deskCode, 
-                      PDATE AS pdate, 
-                      GROUPCODE AS paymentCode 
-                      FROM HEAP WHERE CONSCODE = ${user.data.searchValue} 
+    const sqlQuery = `SELECT TOP 12 SUMMA AS summa,
+                      PDESKCODE AS deskCode,
+                      PDATE AS pdate,
+                      GROUPCODE AS paymentCode
+                      FROM HEAP WHERE CONSCODE = ${user.data.searchValue}
                       ORDER BY PDATE DESC`;
 
-    await checkConnection();
-    const data = await connection.query(sqlQuery);
+    const data = await query(sqlQuery);
 
     if (data.length > 0) {
       message += data
         .map(({ summa, deskCode, pdate, paymentCode }) => {
-          return `${pdate.substring(0, 10)}, ${deskCodes[deskCode] || ""}, ${
-            paymentCodes[paymentCode] || ""
+          return `${pdate.substring(0, 10)}, ${accessDbManager.deskCodes[deskCode] || ""}, ${
+            accessDbManager.paymentCodes[paymentCode] || ""
           }, ${summa.toFixed(2)} тг`;
         })
         .join("\n");
@@ -193,12 +186,12 @@ async function searchCheap(User, ctx) {
   try {
     const chatId = ctx.from.id;
     const user = await User.findOne({ user_id: chatId });
-    const searchQuery = `SELECT DISTINCT WCODE, 
-                         FACTNUMB, 
-                         DATESET 
-                         FROM WCOUNT 
+    const searchQuery = `SELECT DISTINCT WCODE,
+                         FACTNUMB,
+                         DATESET
+                         FROM WCOUNT
                          WHERE CONSCODE = ${user.data.searchValue}`;
-    const waterMeters = await connection.query(searchQuery);
+    const waterMeters = await query(searchQuery);
 
     let formattedResult = `👤 ( ${user.data.searchValue} ) ${user.data.consname}\n`;
 
@@ -208,11 +201,11 @@ async function searchCheap(User, ctx) {
         10
       )}\n📅 Дата | 📋Показания\n`;
 
-      const result = await connection.query(
-        `SELECT TOP 12 CURRCOUNT, 
-         LASTDATE 
-         FROM WCHEAP 
-         WHERE WCODE = ${WCODE} 
+      const result = await query(
+        `SELECT TOP 12 CURRCOUNT,
+         LASTDATE
+         FROM WCHEAP
+         WHERE WCODE = ${WCODE}
          ORDER BY LASTDATE DESC`
       );
 
